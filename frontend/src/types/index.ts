@@ -1,0 +1,6 @@
+export type Scenario = 'normal' | 'low_battery' | 'gps_loss' | 'signal_degradation' | 'motor_vibration' | 'multi_fault';
+export type Severity = 'INFO' | 'WARNING' | 'CRITICAL';
+export type Telemetry = { timestamp: string; latitude: number; longitude: number; altitude: number; ground_speed: number; airspeed: number; vertical_speed: number; heading: number; flight_mode: string; battery_percentage: number; battery_voltage: number; estimated_remaining_flight_time: number; signal_strength: number; gps_fix: boolean; gps_satellites: number; vibration: number; temperature: number; motor_outputs: number[]; health_score: number; };
+export type Alert = { id: string; timestamp: string; severity: Severity; source: string; title: string; explanation: string; metric: string; recommendation: string; acknowledged: boolean; };
+export type Flight = { id: string; date: string; duration: string; health: number; alerts: number; summary: string; };
+export type Component = { name: string; key: string; health: number; state: string; metric: string; trend: string; recommendation: string; image: string; };
