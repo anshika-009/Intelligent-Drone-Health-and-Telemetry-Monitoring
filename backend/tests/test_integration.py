@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 
+from app.database.session import initialize
 from app.main import app
 
+initialize()
 client = TestClient(app)
 
 
@@ -36,3 +38,16 @@ def test_websocket_emits_normalized_telemetry_and_alerts() -> None:
         assert payload['telemetry']['timestamp']
         assert 'health_score' in payload['telemetry']
         assert isinstance(payload['alerts'], list)
+
+
+def test_drone_location_websocket_emits_moving_coordinates() -> None:
+    required = {'drone_id', 'flight_id', 'timestamp', 'latitude', 'longitude', 'altitude', 'heading'}
+    with client.websocket_connect('/ws/drone-location') as socket:
+        first = socket.receive_json()
+        second = socket.receive_json()
+
+    assert required <= set(first)
+    assert first['drone_id'] == 'DRONE-01'
+    assert first['flight_id'] == 'FLT-LIVE-01'
+    assert first['timestamp']
+    assert first['latitude'] != second['latitude'] or first['longitude'] != second['longitude']

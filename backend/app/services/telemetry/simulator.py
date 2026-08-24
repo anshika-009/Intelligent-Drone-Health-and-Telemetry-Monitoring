@@ -30,7 +30,8 @@ class Simulator:
         s['ground_speed'] = max(18, 42 + math.sin(t / 2) * 7)
         s['airspeed'] = s['ground_speed'] + 1
         s['vertical_speed'] = math.sin(t / 1.6) * 2
-        s['heading'] = (274 + t * .8) % 360
+        s['latitude'] = 37.7749 + math.sin(t / 12) * .0018 + math.sin(t / 4.5) * .00025
+        s['longitude'] = -122.4194 + math.cos(t / 13) * .0022 + math.sin(t / 5.5) * .0003
         s['battery_percentage'] = max(15, s['battery_percentage'] - (.18 if self.scenario in ('low_battery','multi_fault') else .035))
         s['signal_strength'] = max(24, s['signal_strength'] - (.22 if self.scenario in ('signal_degradation','multi_fault') else 0) + math.sin(t/2.2)*.6)
         s['vibration'] = min(.86, s['vibration'] + (.012 if self.scenario in ('motor_vibration','multi_fault') else .002) + abs(math.sin(t/3))* .006)

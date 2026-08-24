@@ -46,7 +46,7 @@ describe('protected operational surfaces', () => {
     expect(screen.getByText('SIMULATOR ACTIVE')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Normal Flight/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Zoom in' })).toBeInTheDocument();
-    expect(screen.getByText('IDHTM basemap · live position')).toBeInTheDocument();
+    expect(screen.getByText('© OpenStreetMap contributors · live position')).toBeInTheDocument();
     expect(screen.getByText('Prepare the aircraft')).toBeInTheDocument();
   });
 

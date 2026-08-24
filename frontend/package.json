@@ -12,21 +12,24 @@
   "dependencies": {
     "@vitejs/plugin-react": "latest",
     "framer-motion": "latest",
+    "leaflet": "^1.9.4",
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "react-leaflet": "^5.0.0",
     "react-router-dom": "latest",
     "recharts": "latest"
   },
   "devDependencies": {
-    "@types/react": "latest",
     "@testing-library/jest-dom": "latest",
     "@testing-library/react": "latest",
+    "@types/leaflet": "^1.9.22",
+    "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
+    "jsdom": "latest",
     "typescript": "latest",
     "vite": "latest",
-    "vitest": "latest",
-    "jsdom": "latest"
+    "vitest": "latest"
   }
 }

@@ -72,3 +72,27 @@ The current backend tests cover low-battery and GPS-loss rule behavior. The fron
 ## Design principles
 
 IDHTM uses supplied imagery as the physical world and React-rendered UI as the intelligence layer. The default visual mode is light, with a darker high-contrast cockpit surface only where aviation instrumentation benefits from it. Status colors communicate health state rather than decorate the interface. Future AI capabilities are labeled as planned and are not represented as currently implemented.
+
+## Live OpenStreetMap Tracking
+
+The dashboard and flight replay use Leaflet with OpenStreetMap tiles. No Google Maps API key is required. The frontend subscribes to `VITE_LOCATION_WS_URL`, defaulting to `ws://localhost:8000/ws/drone-location`, and updates the `DRONE-01` marker, heading, altitude readout, and recent route trail as location packets arrive.
+
+The backend emits location packets from `/ws/drone-location` once per second. Each packet includes `drone_id`, `flight_id`, `timestamp`, `latitude`, `longitude`, `altitude`, and `heading`. The simulator moves latitude and longitude on every tick so local testing visibly changes the aircraft position.
+
+For local development, start the backend first:
+
+```bash
+cd backend
+source .venv/bin/activate
+uvicorn app.main:app --reload --port 8000
+```
+
+Then start the frontend in a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The replay route uses a deterministic route generated from the current telemetry origin. Moving the replay slider interpolates the aircraft marker along that route while retaining the same OpenStreetMap surface and attribution. Public OpenStreetMap tiles are appropriate for development and demonstration; a production fleet deployment should use a tile provider or infrastructure appropriate for its traffic and usage policy.
