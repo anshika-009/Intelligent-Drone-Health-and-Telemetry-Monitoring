@@ -1,6 +1,12 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+class LocationUpdate(BaseModel):
+    timestamp: datetime
+    latitude: float
+    longitude: float
+    altitude: float
+
 class TelemetryEvent(BaseModel):
     timestamp: datetime
     drone_id: str = 'DRONE-01'

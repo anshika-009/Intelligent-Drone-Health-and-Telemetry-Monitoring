@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { ArrowDownRight, ArrowRight, Check, ChevronRight, Download, Expand, FileText, Filter, Flag, Gauge, MapPin, Pause, Play, Plus, RotateCcw, Search, Settings2, SlidersHorizontal, Wrench, X } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AlertRow, Chart, EmptyState, Eyebrow, Metric, ScoreBar, SectionHeading, Sparkline, StatusPill } from '../../components/common';
@@ -6,17 +6,85 @@ import { chartSeries, components, flights, scenarioDescriptions, scenarioLabels 
 import { useApp } from '../../store/AppStore';
 import type { Scenario } from '../../types';
 
+export function useDroneLocation() {
+  const [locations, setLocations] = useState<{lat: number, lng: number, alt: number, ts: string}[]>([]);
+  const [liveLocation, setLiveLocation] = useState<{lat: number, lng: number} | null>(null);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/drone/history');
+        if (res.ok) {
+          const data = await res.json();
+          setLocations(data.map((d: any) => ({ lat: d.latitude, lng: d.longitude, alt: d.altitude, ts: d.timestamp })));
+        }
+      } catch (e) {
+        console.error('Failed to fetch history', e);
+      }
+    };
+    void fetchHistory();
+
+    const ws = new WebSocket('ws://localhost:8000/ws/drone-location');
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      const loc = { lat: data.latitude, lng: data.longitude, alt: data.altitude, ts: data.timestamp };
+      setLocations((prev) => [...prev, loc]);
+      setLiveLocation({ lat: data.latitude, lng: data.longitude });
+    };
+    return () => ws.close();
+  }, []);
+
+  return { locations, liveLocation };
+}
+
+
+import { APIProvider, Map, AdvancedMarker } from '@vis.gl/react-google-maps';
+
 type MapVariant = 'live' | 'detail' | 'replay';
 function MapScene({ variant = 'live', progress = 62 }: { variant?: MapVariant; progress?: number }) {
+  const { telemetry } = useApp();
+  const { liveLocation } = useDroneLocation();
   const className = variant === 'replay' ? 'replay-stage map-scene' : `map-visual map-scene${variant === 'detail' ? ' large' : ''}`;
-  return <div className={className}>
-    <div className="map-grid"/><div className="map-water"/><div className="map-park park-a"/><div className="map-park park-b"/>
-    <div className="map-road road-a"/><div className="map-road road-b"/><div className="map-road road-c"/><div className="map-road road-d"/>
-    {variant === 'detail' ? <><div className="route-detail"/><div className="route-point p1"/><div className="route-point p2"/></> : variant === 'replay' ? <div className="replay-route" style={{ '--progress': `${progress}%` } as React.CSSProperties}/> : <div className="map-route"/>}
-    <div className={`map-drone ${variant === 'replay' ? 'replay-drone' : ''}`} style={variant === 'replay' ? { left: `${progress}%` } : undefined}><span className="map-pulse"/><Gauge size={17}/></div>
-    <span className="map-label label-a">{variant === 'detail' ? 'TAKEOFF' : variant === 'replay' ? '14:44:38 / MOTOR 2' : 'NORTH SECTOR'}</span><span className="map-label label-b">{variant === 'detail' ? 'LANDING' : 'DRONE-01 / NOW'}</span><span className="map-label label-c">NORTH ROAD</span>
-    <div className="map-controls" aria-label="Map controls"><button type="button" aria-label="Zoom in">+</button><button type="button" aria-label="Zoom out">−</button><button type="button" aria-label="Center aircraft">⌖</button></div><div className="map-scale">100 m</div><div className="map-attribution">IDHTM basemap · live position</div>
-  </div>;
+  // Use a placeholder API key. Recommend the user to set VITE_GOOGLE_MAPS_API_KEY in their environment.
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+  
+  const center = liveLocation || {
+    lat: telemetry.latitude || 37.7749,
+    lng: telemetry.longitude || -122.4194
+  };
+
+  if (!apiKey) {
+    return (
+      <div className={className} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f0f0f0', color: '#333', textAlign: 'center', padding: '1rem' }}>
+        <div>
+          <strong>Google Maps API Key Missing</strong>
+          <p>Please provide a valid API key via the <code>VITE_GOOGLE_MAPS_API_KEY</code> environment variable to render the map.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={className} style={{ width: '100%', height: '100%', minHeight: '300px' }}>
+      <APIProvider apiKey={apiKey}>
+        <Map
+          defaultZoom={15}
+          defaultCenter={center}
+          center={center}
+          mapId="DEMO_MAP_ID"
+          disableDefaultUI={true}
+          style={{ width: '100%', height: '100%' }}
+        >
+          <AdvancedMarker position={center}>
+            <div className={`map-drone ${variant === 'replay' ? 'replay-drone' : ''}`}>
+              <span className="map-pulse"/>
+              <Gauge size={17} color="#000"/>
+            </div>
+          </AdvancedMarker>
+        </Map>
+      </APIProvider>
+    </div>
+  );
 }
 export function DashboardPage() { const {telemetry,alerts,scenario,setScenario,simulatorActive,setSimulatorActive,acknowledgeAlert}=useApp(); const [showScenario,setShowScenario]=useState(false); const points=chartSeries.map((_,i)=>telemetry.altitude + Math.sin(i)*8); return <div className="page"><div className="page-head"><div><Eyebrow>LIVE MONITOR / DRONE-01</Eyebrow><h1>Flight overview</h1><p className="page-subtitle">A live operational picture with the reasoning layer kept close to the signal.</p></div><div className="head-actions"><button className="button ghost" onClick={()=>setShowScenario(!showScenario)}><SlidersHorizontal size={15}/> {scenarioLabels[scenario]}</button><button className={`button ${simulatorActive?'secondary':''}`} onClick={()=>setSimulatorActive(!simulatorActive)}>{simulatorActive ? <Pause size={15}/> : <Play size={15}/>} {simulatorActive ? 'Pause feed' : 'Start feed'}</button></div></div>{showScenario && <ScenarioPicker value={scenario} onChange={setScenario}/>}<div className="status-strip"><span><span className="live-dot"/> {simulatorActive ? 'SIMULATOR ACTIVE' : 'TELEMETRY PAUSED'}</span><span>Source: local telemetry simulator</span><span>Last packet {new Date(telemetry.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span><span>Flight mode <strong>{telemetry.flight_mode}</strong></span></div><div className="dashboard-grid"><section className="health-card panel" style={{'--health-image': "url('/assets/images/drones/drone-industrial.webp')"} as React.CSSProperties}><div className="panel-head"><div><Eyebrow>PRIMARY SIGNAL</Eyebrow><h3>Aircraft health</h3></div><StatusPill label={telemetry.health_score > 85 ? 'Operational' : telemetry.health_score > 65 ? 'Watch' : 'Action required'} tone={telemetry.health_score > 85 ? 'green' : telemetry.health_score > 65 ? 'amber' : 'red'}/></div><div className="health-score"><div className="score-ring" style={{'--score': `${telemetry.health_score * 3.6}deg`} as React.CSSProperties}><div className="score-ring-content"><strong>{telemetry.health_score}</strong><span>/ 100</span></div></div><div className="health-explain"><strong>{telemetry.health_score > 85 ? 'Within expected envelope' : 'Flight condition changing'}</strong><p>Rule engine is watching {alerts.filter(a=>!a.acknowledged).length || 1} active signal{alerts.filter(a=>!a.acknowledged).length === 1 ? '' : 's'} across 5 systems.</p><Link to="/app/health" className="inline-link">Inspect health model <ArrowRight size={14}/></Link></div></div><div className="health-components">{components.slice(0,4).map(c=><div key={c.key}><span>{c.name}</span><strong>{c.key==='motors' ? Math.max(45, Math.round(telemetry.health_score-12)) : c.health}</strong><Sparkline points={Array.from({length:8},(_,i)=>c.health + Math.sin(i)*2)}/></div>)}</div></section><section className="decision-panel panel"><div className="panel-head"><div><Eyebrow>NEXT BEST ACTION</Eyebrow><h3>Prepare the aircraft</h3></div><span className="decision-mark"><Check size={15}/></span></div><div className="decision-action"><div><strong>Inspect Motor 2 before the next extended flight.</strong><p>Vibration is trending upward while the rest of the airframe remains inside its expected envelope.</p></div><Link className="inline-link" to="/app/maintenance">Open maintenance <ArrowRight size={14}/></Link></div><div className="decision-footer"><span>Evidence linked</span><span>Rule MOT-VIB-02</span><span>Priority medium</span></div></section><section className="map-card panel"><div className="panel-head"><div><Eyebrow>POSITION / LIVE</Eyebrow><h3>Mission area</h3></div><span className="map-coords"><MapPin size={14}/> {telemetry.latitude.toFixed(4)}° N, {Math.abs(telemetry.longitude).toFixed(4)}° W</span></div><MapScene/></section><section className="flight-status panel"><div className="panel-head"><div><Eyebrow>FLIGHT STATUS</Eyebrow><h3>Survey / active</h3></div><StatusPill label="In progress" tone="blue"/></div><div className="flight-status-stats"><Metric label="Elapsed" value="18:42"/><Metric label="Remaining" value={telemetry.estimated_remaining_flight_time} unit="min"/><Metric label="Mode" value={telemetry.flight_mode}/></div><div className="flight-progress"><div style={{width:'68%'}}/><span>Takeoff 14:32</span><span>Estimated landing 14:59</span></div><div className="flight-footer"><span>Mission: industrial perimeter scan</span><Link to="/app/flights/FLT-2026-0821-07">Open flight <ChevronRight size={14}/></Link></div></section><section className="telemetry-panel panel"><div className="panel-head"><div><Eyebrow>TELEMETRY / 24H</Eyebrow><h3>Altitude and speed</h3></div><div className="chart-legend"><span><i className="blue"/> Altitude</span><span><i className="gray"/> Baseline</span></div></div><div className="chart-large"><Chart type="area" points={points} labels/></div><div className="metric-row"><Metric label="Altitude" value={telemetry.altitude.toFixed(0)} unit="m" note="+4.2%" tone="healthy"/><Metric label="Ground speed" value={telemetry.ground_speed.toFixed(0)} unit="km/h"/><Metric label="Vertical speed" value={telemetry.vertical_speed.toFixed(1)} unit="m/s"/><Metric label="Temperature" value={telemetry.temperature.toFixed(0)} unit="°C"/></div></section><section className="alert-panel panel"><div className="panel-head"><div><Eyebrow>RULE ENGINE / ACTIVE</Eyebrow><h3>Signals requiring attention</h3></div><Link className="inline-link" to="/app/alerts">View all <ArrowRight size={14}/></Link></div>{alerts.slice(0,2).map(a=><AlertRow key={a.id} {...a} onAcknowledge={()=>acknowledgeAlert(a.id)}/> )}</section></div></div>; }
 function ScenarioPicker({value,onChange}:{value:Scenario;onChange:(s:Scenario)=>void}) { return <div className="scenario-picker"><div><strong>Choose a telemetry scenario</strong><span>Scenario changes flow through the same health and alert pipeline.</span></div><div className="scenario-options">{(Object.keys(scenarioLabels) as Scenario[]).map(s=><button key={s} className={value===s?'selected':''} onClick={()=>onChange(s)}><span>{scenarioLabels[s]}</span><small>{scenarioDescriptions[s]}</small></button>)}</div></div>; }
