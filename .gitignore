@@ -1,0 +1,34 @@
+# Node dependencies and build output
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
+frontend/.env.local
+
+# Python virtual environment and caches
+.venv/
+backend/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local runtime databases
+*.sqlite3
+*.db
+
+# TypeScript/Vite generated files
+*.tsbuildinfo
+
+# macOS files
+.DS_Store
+
+# Logs
+*.log
+
+# IDE files
+.vscode/
+.idea/
