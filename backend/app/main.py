@@ -178,7 +178,7 @@ def alerts():
     return [
         {
             **rule,
-            'id': f"{rule['id']}-{simulator.tick}",
+            'id': f"RULE-{rule['id'].upper()}",
             'timestamp': event['timestamp'],
             'acknowledged': False,
         }
@@ -288,7 +288,15 @@ async def telemetry_socket(websocket: WebSocket):
                 {
                     'scenario': simulator.scenario,
                     'telemetry': event,
-                    'alerts': explainable_rules(event),
+                    'alerts': [
+                        {
+                            **rule,
+                            'id': f"RULE-{rule['id'].upper()}",
+                            'timestamp': event['timestamp'],
+                            'acknowledged': False,
+                        }
+                        for rule in explainable_rules(event)
+                    ],
                 }
             )
             await asyncio.sleep(1)
