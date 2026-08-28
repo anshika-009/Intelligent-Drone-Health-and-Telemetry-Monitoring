@@ -60,7 +60,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       socket = new WebSocket(WS_URL);
       socket.onopen = () => { void fetch(`${API_URL}/telemetry/scenario`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scenario }) }).catch(() => undefined); };
-      socket.onmessage = event => { const payload = JSON.parse(event.data) as { telemetry?: Telemetry; alerts?: Array<Omit<Alert, 'id'|'timestamp'|'acknowledged'>> }; if (payload.telemetry) setTelemetry(payload.telemetry); if (payload.alerts?.length) setAlerts(payload.alerts.map((a, i) => ({ ...a, id: `BACKEND-${i}`, timestamp: 'just now', acknowledged: false }))); };
+      socket.onmessage = event => { const payload = JSON.parse(event.data) as { telemetry?: Telemetry; alerts?: Alert[] }; if (payload.telemetry) setTelemetry(payload.telemetry); if (payload.alerts) setAlerts(previous => [ ...payload.alerts!.map(incoming => { const existing = previous.find(p => p.id === incoming.id); return existing ? { ...incoming, acknowledged: existing.acknowledged } : incoming; }), ...previous.filter(a => a.id.startsWith('LIVE-')) ]); };
       socket.onerror = () => { startFallback(); };
       try {
         locationSocket = new WebSocket(LOCATION_WS_URL);
@@ -91,7 +91,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { window.clearTimeout(timeout); if (fallbackTimer) window.clearInterval(fallbackTimer); socket?.close(); locationSocket?.close(); };
   }, [scenario, simulatorActive]);
 
-  useEffect(() => { const next = deriveLocalAlerts(telemetry); if (next.length) setAlerts(previous => [...next, ...previous.filter(a => !a.id.startsWith('LIVE-') && !a.id.startsWith('BACKEND-'))].slice(0, 8)); }, [telemetry]);
+  useEffect(() => { 
+    // If telemetry came from the backend, we don't want to generate duplicate local alerts.
+    // We can rely on the fact that if a websocket is connected, we shouldn't derive local alerts.
+    // We'll use a simple heuristic: if simulatorActive is true and we haven't fallen back, we assume backend is handling alerts.
+    // However, to be perfectly safe without adding more state, we just filter out LIVE- alerts if we're generating them.
+    const next = deriveLocalAlerts(telemetry); 
+    setAlerts(previous => {
+      const hasBackendAlerts = previous.some(a => a.id.startsWith('RULE-'));
+      // If we have active backend alerts, skip local generation to avoid duplicates.
+      if (hasBackendAlerts) return previous.filter(a => !a.id.startsWith('LIVE-'));
+      // If no backend alerts are present, it's safe to show local alerts (either backend sent [] or we are in fallback).
+      if (!next.length) return previous.filter(a => !a.id.startsWith('LIVE-'));
+      return [...next, ...previous.filter(a => !a.id.startsWith('LIVE-'))].slice(0, 8);
+    });
+  }, [telemetry]);
   const value = useMemo(() => ({ telemetry, scenario, setScenario, simulatorActive, setSimulatorActive, alerts, acknowledgeAlert: (id: string) => setAlerts(previous => previous.map(a => a.id === id ? { ...a, acknowledged: true } : a)), user, signIn: (email: string, name = 'Flight Operator') => { const next = { email, name }; localStorage.setItem('idhtm-user', JSON.stringify(next)); setUser(next); }, signOut: () => { localStorage.removeItem('idhtm-user'); setUser(null); } }), [telemetry, scenario, simulatorActive, alerts, user]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
