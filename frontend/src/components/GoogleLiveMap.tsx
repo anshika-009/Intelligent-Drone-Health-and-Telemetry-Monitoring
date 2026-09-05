@@ -62,10 +62,6 @@ export function LiveGoogleMap({ location, route, fallback }: Props) {
 
   const position: LatLng = [current.latitude, current.longitude];
 
-  if (tileError && fallback) {
-    return <>{fallback}</>;
-  }
-
   return (
     <div className="live-google-map idhtm-openstreet-map" aria-label="OpenStreetMap with live drone location">
       <MapContainer
