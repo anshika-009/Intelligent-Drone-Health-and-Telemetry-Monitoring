@@ -1,5 +1,7 @@
 import asyncio
 import secrets
+import logging
+import traceback
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -11,6 +13,14 @@ from app.schemas.telemetry import Credentials, ScenarioRequest
 from app.services.health.engine import explainable_rules, component_health
 from app.services.telemetry.simulator import Simulator, SCENARIOS
 
+logging.basicConfig(
+    level = logging.INFO,
+    format = '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+    datefmt = '%H:%M:%S',
+)
+
+logger = logging.getLogger('idhtm.tick_loop')
+
 app = FastAPI(title='IDHTM Telemetry API', version='1.0.0')
 app.add_middleware(
     CORSMiddleware,
@@ -21,6 +31,14 @@ app.add_middleware(
 )
 
 simulator = Simulator()
+# shared state holder 
+latest_event: dict = {}
+tick_loop_status = {
+    'healthy': True,
+    'last_tick_at': None,
+    'last_error': None,
+    'error_count': 0,
+}
 users = {
     'operator@idhtm.dev': {
         'name': 'Demo Operator',
@@ -68,10 +86,46 @@ flights = [
     },
 ]
 
-
+#startup handler seeds the current state and starts the tick loop
 @app.on_event('startup')
-def startup() -> None:
+async def startup() -> None:
     initialize()
+    global latest_event
+    latest_event = simulator.next()
+    asyncio.create_task(_tick_loop())
+
+async def _tick_loop() -> None:
+    global latest_event
+    while True:
+        await asyncio.sleep(1)
+
+        try:
+            latest_event = simulator.next()
+            persist_telemetry(latest_event, simulator.scenario)
+            tick_loop_status['healthy'] = True
+            tick_loop_status['last_tick_at'] = datetime.now(timezone.utc).isoformat()
+
+        except Exception as error:
+            tick_loop_status['healthy'] = False
+            tick_loop_status['last_error'] = str(error)
+            tick_loop_status['error_count'] += 1
+
+            logger.error(
+                "Tick failed on scenario '%s' (tick #%s): %s\n%s",
+                simulator.scenario,
+                simulator.tick,
+                error,
+                traceback.format_exc(),
+            )
+
+
+@app.get('/api/system/status')
+def system_status():
+    return {
+        'tick_loop': tick_loop_status,
+        'scenario': simulator.scenario,
+        'server_time': datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get('/api/healthcheck')
@@ -135,7 +189,7 @@ def drones():
             'name': 'DRONE-01',
             'model': 'Industrial Survey Mk II',
             'status': 'simulator_active',
-            'health': simulator.next()['health_score'],
+            'health': latest_event['health_score'],
         }
     ]
 
@@ -144,7 +198,7 @@ def drones():
 def scenarios():
     return [{'id': key, **value} for key, value in SCENARIOS.items()]
 
-
+#lags for about a second before updating
 @app.post('/api/telemetry/scenario')
 def set_scenario(request: ScenarioRequest):
     try:
@@ -156,14 +210,12 @@ def set_scenario(request: ScenarioRequest):
 
 @app.get('/api/telemetry/latest')
 def latest():
-    event = simulator.next()
-    persist_telemetry(event, simulator.scenario)
-    return event
+    return latest_event
 
 
 @app.get('/api/health')
 def health():
-    event = simulator.next()
+    event = latest_event
     return {
         'scenario': simulator.scenario,
         'score': event['health_score'],
@@ -174,7 +226,7 @@ def health():
 
 @app.get('/api/alerts')
 def alerts():
-    event = simulator.next()
+    event = latest_event
     return [
         {
             **rule,
@@ -282,8 +334,7 @@ async def telemetry_socket(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            event = simulator.next()
-            persist_telemetry(event, simulator.scenario)
+            event = latest_event
             await websocket.send_json(
                 {
                     'scenario': simulator.scenario,
@@ -297,6 +348,7 @@ async def telemetry_socket(websocket: WebSocket):
                         }
                         for rule in explainable_rules(event)
                     ],
+                    'system' : tick_loop_status
                 }
             )
             await asyncio.sleep(1)
@@ -309,7 +361,7 @@ async def drone_location_socket(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            event = simulator.next()
+            event = latest_event
             await websocket.send_json(
                 {
                     'drone_id': 'DRONE-01',
