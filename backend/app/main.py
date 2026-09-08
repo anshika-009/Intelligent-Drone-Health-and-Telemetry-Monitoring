@@ -1,9 +1,6 @@
 import asyncio
 import secrets
-import logging
-import traceback
 from datetime import datetime, timezone
-
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,16 +9,11 @@ from app.database.session import initialize, persist_telemetry
 from app.schemas.telemetry import Credentials, ScenarioRequest
 from app.services.health.engine import explainable_rules, component_health
 from app.services.telemetry.simulator import Simulator, SCENARIOS
-
-logging.basicConfig(
-    level = logging.INFO,
-    format = '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
-    datefmt = '%H:%M:%S',
-)
-
-logger = logging.getLogger('idhtm.tick_loop')
+from app.services.rule_engine import IDHTMRuleEngine
 
 app = FastAPI(title='IDHTM Telemetry API', version='1.0.0')
+physics_engine = IDHTMRuleEngine()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['*'],
@@ -31,14 +23,6 @@ app.add_middleware(
 )
 
 simulator = Simulator()
-# shared state holder 
-latest_event: dict = {}
-tick_loop_status = {
-    'healthy': True,
-    'last_tick_at': None,
-    'last_error': None,
-    'error_count': 0,
-}
 users = {
     'operator@idhtm.dev': {
         'name': 'Demo Operator',
@@ -86,47 +70,9 @@ flights = [
     },
 ]
 
-#startup handler seeds the current state and starts the tick loop
 @app.on_event('startup')
-async def startup() -> None:
+def startup() -> None:
     initialize()
-    global latest_event
-    latest_event = simulator.next()
-    asyncio.create_task(_tick_loop())
-
-async def _tick_loop() -> None:
-    global latest_event
-    while True:
-        await asyncio.sleep(1)
-
-        try:
-            latest_event = simulator.next()
-            persist_telemetry(latest_event, simulator.scenario)
-            tick_loop_status['healthy'] = True
-            tick_loop_status['last_tick_at'] = datetime.now(timezone.utc).isoformat()
-
-        except Exception as error:
-            tick_loop_status['healthy'] = False
-            tick_loop_status['last_error'] = str(error)
-            tick_loop_status['error_count'] += 1
-
-            logger.error(
-                "Tick failed on scenario '%s' (tick #%s): %s\n%s",
-                simulator.scenario,
-                simulator.tick,
-                error,
-                traceback.format_exc(),
-            )
-
-
-@app.get('/api/system/status')
-def system_status():
-    return {
-        'tick_loop': tick_loop_status,
-        'scenario': simulator.scenario,
-        'server_time': datetime.now(timezone.utc).isoformat(),
-    }
-
 
 @app.get('/api/healthcheck')
 def healthcheck():
@@ -135,7 +81,6 @@ def healthcheck():
         'service': 'idhtm-api',
         'time': datetime.now(timezone.utc).isoformat(),
     }
-
 
 @app.post('/api/auth/register')
 def register(credentials: Credentials):
@@ -158,7 +103,6 @@ def register(credentials: Credentials):
         },
     }
 
-
 @app.post('/api/auth/login')
 def login(credentials: Credentials):
     user = users.get(credentials.email)
@@ -175,11 +119,9 @@ def login(credentials: Credentials):
         },
     }
 
-
 @app.post('/api/auth/logout')
 def logout():
     return {'status': 'signed_out'}
-
 
 @app.get('/api/drones')
 def drones():
@@ -189,16 +131,14 @@ def drones():
             'name': 'DRONE-01',
             'model': 'Industrial Survey Mk II',
             'status': 'simulator_active',
-            'health': latest_event['health_score'],
+            'health': simulator.next()['health_score'],
         }
     ]
-
 
 @app.get('/api/telemetry/scenarios')
 def scenarios():
     return [{'id': key, **value} for key, value in SCENARIOS.items()]
 
-#lags for about a second before updating
 @app.post('/api/telemetry/scenario')
 def set_scenario(request: ScenarioRequest):
     try:
@@ -207,15 +147,15 @@ def set_scenario(request: ScenarioRequest):
         raise HTTPException(422, str(error))
     return {'scenario': simulator.scenario, 'status': 'active'}
 
-
 @app.get('/api/telemetry/latest')
 def latest():
-    return latest_event
-
+    event = simulator.next()
+    persist_telemetry(event, simulator.scenario)
+    return event
 
 @app.get('/api/health')
 def health():
-    event = latest_event
+    event = simulator.next()
     return {
         'scenario': simulator.scenario,
         'score': event['health_score'],
@@ -223,11 +163,10 @@ def health():
         'rules': explainable_rules(event),
     }
 
-
 @app.get('/api/alerts')
 def alerts():
-    event = latest_event
-    return [
+    event = simulator.next()
+    base_alerts = [
         {
             **rule,
             'id': f"RULE-{rule['id'].upper()}",
@@ -236,17 +175,28 @@ def alerts():
         }
         for rule in explainable_rules(event)
     ]
-
+    
+    # Injecting AI Rule Engine Logic for REST API
+    voltage = event.get('voltage', 11.2)
+    battery_eval = physics_engine.evaluate_battery_state(voltage)
+    if battery_eval['status'] not in ["NORMAL", "STABLE"]:
+        base_alerts.append({
+            'id': f"RULE-BATT-{battery_eval['status']}",
+            'message': f"Battery {battery_eval['status']}: {battery_eval['action']}",
+            'severity': 'critical' if battery_eval['status'] in ['CRITICAL', 'EMERGENCY'] else 'warning',
+            'timestamp': event['timestamp'],
+            'acknowledged': False,
+        })
+        
+    return base_alerts
 
 @app.post('/api/alerts/{alert_id}/acknowledge')
 def acknowledge(alert_id: str):
     return {'id': alert_id, 'acknowledged': True}
 
-
 @app.get('/api/flights')
 def list_flights():
     return flights
-
 
 @app.get('/api/flights/{flight_id}')
 def flight(flight_id: str):
@@ -255,11 +205,9 @@ def flight(flight_id: str):
         raise HTTPException(404, 'Flight session not found.')
     return {**match, 'telemetry': [], 'events': []}
 
-
 @app.get('/api/maintenance')
 def list_maintenance():
     return maintenance
-
 
 @app.post('/api/maintenance')
 def create_maintenance(payload: dict):
@@ -271,7 +219,6 @@ def create_maintenance(payload: dict):
     maintenance.append(item)
     return item
 
-
 @app.patch('/api/maintenance/{item_id}')
 def update_maintenance(item_id: str, payload: dict):
     for item in maintenance:
@@ -279,7 +226,6 @@ def update_maintenance(item_id: str, payload: dict):
             item.update(payload)
             return item
     raise HTTPException(404, 'Maintenance record not found.')
-
 
 @app.get('/api/reports')
 def reports():
@@ -297,7 +243,6 @@ def reports():
             'status': 'ready',
         },
     ]
-
 
 @app.get('/api/connections')
 def connections():
@@ -328,40 +273,71 @@ def connections():
         },
     ]
 
-
 @app.websocket('/ws/telemetry')
 async def telemetry_socket(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            event = latest_event
+            event = simulator.next()
+            persist_telemetry(event, simulator.scenario)
+            
+            # --- AI RULE ENGINE INTEGRATION START ---
+            dynamic_alerts = [
+                {
+                    **rule,
+                    'id': f"RULE-{rule['id'].upper()}",
+                    'timestamp': event['timestamp'],
+                    'acknowledged': False,
+                }
+                for rule in explainable_rules(event)
+            ]
+            
+            # 1. Battery Health Processing
+            voltage = event.get('voltage', 11.2) # Defaults to safe voltage if key is missing
+            battery_eval = physics_engine.evaluate_battery_state(voltage)
+            
+            if battery_eval['status'] not in ["NORMAL", "STABLE"]:
+                dynamic_alerts.append({
+                    'id': f"RULE-BATT-{battery_eval['status']}",
+                    'message': f"Battery {battery_eval['status']}: {battery_eval['action']}",
+                    'severity': 'critical' if battery_eval['status'] in ['CRITICAL', 'EMERGENCY'] else 'warning',
+                    'timestamp': event['timestamp'],
+                    'acknowledged': False,
+                })
+                
+            # 2. Motor Health Processing
+            ax = event.get('ax', 0.0)
+            ay = event.get('ay', 0.0)
+            az = event.get('az', 0.0)
+            motor_eval = physics_engine.evaluate_motor_health(ax, ay, az)
+            
+            if motor_eval['vibration_alert']:
+                dynamic_alerts.append({
+                    'id': "RULE-MOTOR-VIBE",
+                    'message': motor_eval['risk'],
+                    'severity': 'critical',
+                    'timestamp': event['timestamp'],
+                    'acknowledged': False,
+                })
+            # --- AI RULE ENGINE INTEGRATION END ---
+
             await websocket.send_json(
                 {
                     'scenario': simulator.scenario,
                     'telemetry': event,
-                    'alerts': [
-                        {
-                            **rule,
-                            'id': f"RULE-{rule['id'].upper()}",
-                            'timestamp': event['timestamp'],
-                            'acknowledged': False,
-                        }
-                        for rule in explainable_rules(event)
-                    ],
-                    'system' : tick_loop_status
+                    'alerts': dynamic_alerts,
                 }
             )
             await asyncio.sleep(1)
     except (WebSocketDisconnect, asyncio.CancelledError):
         return
 
-
 @app.websocket('/ws/drone-location')
 async def drone_location_socket(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            event = latest_event
+            event = simulator.next()
             await websocket.send_json(
                 {
                     'drone_id': 'DRONE-01',
