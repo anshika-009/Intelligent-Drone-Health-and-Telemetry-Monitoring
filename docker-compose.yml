@@ -9,15 +9,18 @@ services:
       - "5432:5432"
     volumes:
       - idhtm_postgres:/var/lib/postgresql/data
+      
   backend:
     build: ./backend
     environment:
       IDHTM_ENV: development
       DATABASE_URL: postgresql://idhtm:idhtm_dev@postgres:5432/idhtm
+      MAVLINK_URL: "tcp:host.docker.internal:14552" 
     ports:
       - "8000:8000"
     depends_on:
       - postgres
+      
   frontend:
     build: ./frontend
     environment:
@@ -27,5 +30,6 @@ services:
       - "5173:5173"
     depends_on:
       - backend
+
 volumes:
   idhtm_postgres:

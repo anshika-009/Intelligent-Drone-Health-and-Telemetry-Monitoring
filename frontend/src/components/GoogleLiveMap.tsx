@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo,useRef, useState, type ReactNode } from 'react';
 import { Circle, MapContainer, Marker, Polyline, TileLayer, ZoomControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -16,12 +16,16 @@ const DEFAULT_CENTER: LatLng = [37.7749, -122.4194];
 
 function RecenterMap({ location }: { location: Location }) {
   const map = useMap();
+  const lastCenter = useRef<[number, number] | null>(null);
 
   useEffect(() => {
-    map.flyTo([location.latitude, location.longitude], map.getZoom(), {
-      animate: true,
-      duration: 0.7,
-    });
+    const next: [number, number] = [location.latitude, location.longitude];
+    const prev = lastCenter.current;
+    const movedEnough = !prev || map.distance(prev, next) > 25;
+    if (!movedEnough) return;
+
+    lastCenter.current = next;
+    map.panTo(next, { animate: true, duration: 1.4, easeLinearity: 0.4 });
   }, [location.latitude, location.longitude, map]);
 
   return null;
@@ -61,10 +65,6 @@ export function LiveGoogleMap({ location, route, fallback }: Props) {
   }), [current.heading]);
 
   const position: LatLng = [current.latitude, current.longitude];
-
-  if (tileError && fallback) {
-    return <>{fallback}</>;
-  }
 
   return (
     <div className="live-google-map idhtm-openstreet-map" aria-label="OpenStreetMap with live drone location">
