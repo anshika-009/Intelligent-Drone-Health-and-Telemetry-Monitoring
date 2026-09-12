@@ -1,12 +1,11 @@
 import asyncio
-import secrets
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.security import hash_password, verify_password
+from app.core.clerk_auth import get_current_user, get_current_user_ws
 from app.database.session import initialize, persist_telemetry
-from app.schemas.telemetry import Credentials, ScenarioRequest
+from app.schemas.telemetry import ScenarioRequest
 from app.services.health.engine import explainable_rules, component_health
 from app.services.telemetry.simulator import Simulator, SCENARIOS
 from app.services.rule_engine import IDHTMRuleEngine
@@ -23,13 +22,6 @@ app.add_middleware(
 )
 
 simulator = Simulator()
-users = {
-    'operator@idhtm.dev': {
-        'name': 'Demo Operator',
-        'password': hash_password('demo-flight'),
-    }
-}
-tokens: dict[str, str] = {}
 
 maintenance = [
     {
@@ -82,49 +74,8 @@ def healthcheck():
         'time': datetime.now(timezone.utc).isoformat(),
     }
 
-@app.post('/api/auth/register')
-def register(credentials: Credentials):
-    if credentials.email in users:
-        raise HTTPException(409, 'An operator with this email already exists.')
-    if len(credentials.password) < 6:
-        raise HTTPException(422, 'Password must be at least 6 characters.')
-
-    users[credentials.email] = {
-        'name': credentials.name or 'Flight Operator',
-        'password': hash_password(credentials.password),
-    }
-    token = secrets.token_urlsafe(24)
-    tokens[token] = credentials.email
-    return {
-        'token': token,
-        'user': {
-            'email': credentials.email,
-            'name': users[credentials.email]['name'],
-        },
-    }
-
-@app.post('/api/auth/login')
-def login(credentials: Credentials):
-    user = users.get(credentials.email)
-    if not user or not verify_password(credentials.password, user['password']):
-        raise HTTPException(401, 'Invalid operator credentials.')
-
-    token = secrets.token_urlsafe(24)
-    tokens[token] = credentials.email
-    return {
-        'token': token,
-        'user': {
-            'email': credentials.email,
-            'name': user['name'],
-        },
-    }
-
-@app.post('/api/auth/logout')
-def logout():
-    return {'status': 'signed_out'}
-
 @app.get('/api/drones')
-def drones():
+def drones(user_id: str = Depends(get_current_user)):
     return [
         {
             'id': 'DRONE-01',
@@ -136,11 +87,11 @@ def drones():
     ]
 
 @app.get('/api/telemetry/scenarios')
-def scenarios():
+def scenarios(user_id: str = Depends(get_current_user)):
     return [{'id': key, **value} for key, value in SCENARIOS.items()]
 
 @app.post('/api/telemetry/scenario')
-def set_scenario(request: ScenarioRequest):
+def set_scenario(request: ScenarioRequest, user_id: str = Depends(get_current_user)):
     try:
         simulator.set_scenario(request.scenario)
     except ValueError as error:
@@ -148,13 +99,13 @@ def set_scenario(request: ScenarioRequest):
     return {'scenario': simulator.scenario, 'status': 'active'}
 
 @app.get('/api/telemetry/latest')
-def latest():
+def latest(user_id: str = Depends(get_current_user)):
     event = simulator.next()
     persist_telemetry(event, simulator.scenario)
     return event
 
 @app.get('/api/health')
-def health():
+def health(user_id: str = Depends(get_current_user)):
     event = simulator.next()
     return {
         'scenario': simulator.scenario,
@@ -164,7 +115,7 @@ def health():
     }
 
 @app.get('/api/alerts')
-def alerts():
+def alerts(user_id: str = Depends(get_current_user)):
     event = simulator.next()
     base_alerts = [
         {
@@ -175,7 +126,7 @@ def alerts():
         }
         for rule in explainable_rules(event)
     ]
-    
+
     # Injecting AI Rule Engine Logic for REST API
     voltage = event.get('voltage', 11.2)
     battery_eval = physics_engine.evaluate_battery_state(voltage)
@@ -187,30 +138,30 @@ def alerts():
             'timestamp': event['timestamp'],
             'acknowledged': False,
         })
-        
+
     return base_alerts
 
 @app.post('/api/alerts/{alert_id}/acknowledge')
-def acknowledge(alert_id: str):
+def acknowledge(alert_id: str, user_id: str = Depends(get_current_user)):
     return {'id': alert_id, 'acknowledged': True}
 
 @app.get('/api/flights')
-def list_flights():
+def list_flights(user_id: str = Depends(get_current_user)):
     return flights
 
 @app.get('/api/flights/{flight_id}')
-def flight(flight_id: str):
+def flight(flight_id: str, user_id: str = Depends(get_current_user)):
     match = next((item for item in flights if item['id'] == flight_id), None)
     if not match:
         raise HTTPException(404, 'Flight session not found.')
     return {**match, 'telemetry': [], 'events': []}
 
 @app.get('/api/maintenance')
-def list_maintenance():
+def list_maintenance(user_id: str = Depends(get_current_user)):
     return maintenance
 
 @app.post('/api/maintenance')
-def create_maintenance(payload: dict):
+def create_maintenance(payload: dict, user_id: str = Depends(get_current_user)):
     item = {
         'id': f"MNT-{len(maintenance) + 1:03d}",
         'created_at': datetime.now(timezone.utc).isoformat(),
@@ -220,7 +171,7 @@ def create_maintenance(payload: dict):
     return item
 
 @app.patch('/api/maintenance/{item_id}')
-def update_maintenance(item_id: str, payload: dict):
+def update_maintenance(item_id: str, payload: dict, user_id: str = Depends(get_current_user)):
     for item in maintenance:
         if item['id'] == item_id:
             item.update(payload)
@@ -228,7 +179,7 @@ def update_maintenance(item_id: str, payload: dict):
     raise HTTPException(404, 'Maintenance record not found.')
 
 @app.get('/api/reports')
-def reports():
+def reports(user_id: str = Depends(get_current_user)):
     return [
         {
             'id': 'RPT-FLIGHT-01',
@@ -245,7 +196,7 @@ def reports():
     ]
 
 @app.get('/api/connections')
-def connections():
+def connections(user_id: str = Depends(get_current_user)):
     return [
         {
             'source': 'Simulator',
@@ -275,12 +226,15 @@ def connections():
 
 @app.websocket('/ws/telemetry')
 async def telemetry_socket(websocket: WebSocket):
+    user_id = await get_current_user_ws(websocket)
+    if user_id is None:
+        return
     await websocket.accept()
     try:
         while True:
             event = simulator.next()
             persist_telemetry(event, simulator.scenario)
-            
+
             # --- AI RULE ENGINE INTEGRATION START ---
             dynamic_alerts = [
                 {
@@ -291,11 +245,11 @@ async def telemetry_socket(websocket: WebSocket):
                 }
                 for rule in explainable_rules(event)
             ]
-            
+
             # 1. Battery Health Processing
             voltage = event.get('voltage', 11.2) # Defaults to safe voltage if key is missing
             battery_eval = physics_engine.evaluate_battery_state(voltage)
-            
+
             if battery_eval['status'] not in ["NORMAL", "STABLE"]:
                 dynamic_alerts.append({
                     'id': f"RULE-BATT-{battery_eval['status']}",
@@ -304,13 +258,13 @@ async def telemetry_socket(websocket: WebSocket):
                     'timestamp': event['timestamp'],
                     'acknowledged': False,
                 })
-                
+
             # 2. Motor Health Processing
             ax = event.get('ax', 0.0)
             ay = event.get('ay', 0.0)
             az = event.get('az', 0.0)
             motor_eval = physics_engine.evaluate_motor_health(ax, ay, az)
-            
+
             if motor_eval['vibration_alert']:
                 dynamic_alerts.append({
                     'id': "RULE-MOTOR-VIBE",
@@ -334,6 +288,9 @@ async def telemetry_socket(websocket: WebSocket):
 
 @app.websocket('/ws/drone-location')
 async def drone_location_socket(websocket: WebSocket):
+    user_id = await get_current_user_ws(websocket)
+    if user_id is None:
+        return
     await websocket.accept()
     try:
         while True:

@@ -11,6 +11,7 @@ frontend/.env.local
 
 # Python virtual environment and caches
 .venv/
+myvenv
 backend/.venv/
 backend/venv/
 __pycache__/
