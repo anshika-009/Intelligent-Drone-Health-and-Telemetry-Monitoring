@@ -2,7 +2,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-DB_PATH = Path(__file__).resolve().parents[2] / 'idhtm_demo.sqlite3'
+DB_PATH = Path(__file__).resolve().parents[2] / "idhtm_demo.sqlite3"
 
 
 def connection() -> sqlite3.Connection:
@@ -40,8 +40,16 @@ def initialize() -> None:
 def persist_telemetry(event: dict[str, Any], scenario: str) -> None:
     db = connection()
     db.execute(
-        'INSERT INTO telemetry(timestamp, scenario, health_score, battery, signal, gps_fix, vibration) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        (event['timestamp'], scenario, event['health_score'], event['battery_percentage'], event['signal_strength'], int(event['gps_fix']), event['vibration'])
+        "INSERT INTO telemetry(timestamp, scenario, health_score, battery, signal, gps_fix, vibration) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            event["timestamp"],
+            scenario,
+            event["health_score"],
+            event["battery_percentage"],
+            event["signal_strength"],
+            int(event["gps_fix"]),
+            event["vibration"],
+        ),
     )
     db.commit()
     db.close()

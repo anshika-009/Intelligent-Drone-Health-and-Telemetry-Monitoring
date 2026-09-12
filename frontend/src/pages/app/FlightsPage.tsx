@@ -1,7 +1,70 @@
-import { Download, Search, SlidersHorizontal } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { SectionHeading } from '../../components/common';
-import { ChevronRight } from 'lucide-react';
-import { flights } from '../../data/mock';
+import { Download, Search, SlidersHorizontal } from "lucide-react";
+import { Link } from "react-router-dom";
+import { SectionHeading } from "../../components/common";
+import { ChevronRight } from "lucide-react";
+import { flights } from "../../data/mock";
 
-export function FlightsPage() { return <div className="page"><SectionHeading eyebrow="FLIGHT OPERATIONS" title="Flight history" copy="Review every flight as one connected session of route, telemetry, health, and events." action={<button className="button ghost" onClick={()=>{const blob=new Blob(['flight_id,date,duration,health,alerts\\nFLT-2026-0821-07,2026-08-21,18m 42s,92,2\\nFLT-2026-0820-03,2026-08-20,26m 11s,88,4\\nFLT-2026-0818-11,2026-08-18,12m 28s,97,0'],{type:'text/csv'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='idhtm-flight-log.csv';link.click();URL.revokeObjectURL(link.href)}}><Download size={15}/> Export log</button>}/><div className="table-toolbar"><div className="search-input"><Search size={15}/><input placeholder="Search flights"/></div><button className="icon-button"><SlidersHorizontal size={17}/></button></div><div className="data-table"><div className="table-head"><span>Flight ID</span><span>Date</span><span>Duration</span><span>Health</span><span>Alerts</span><span>Summary</span><span/></div>{flights.map(f=><Link className="table-row" to={`/app/flights/${f.id}`} key={f.id}><strong>{f.id}</strong><span>{f.date}</span><span>{f.duration}</span><span className={f.health>90?'text-green':'text-amber'}>{f.health} / 100</span><span>{f.alerts}</span><span>{f.summary}</span><ChevronRight size={16}/></Link>)}</div></div>; }
+export function FlightsPage() {
+  return (
+    <div className="page">
+      <SectionHeading
+        eyebrow="FLIGHT OPERATIONS"
+        title="Flight history"
+        copy="Review every flight as one connected session of route, telemetry, health, and events."
+        action={
+          <button
+            className="button ghost"
+            onClick={() => {
+              const blob = new Blob(
+                [
+                  "flight_id,date,duration,health,alerts\\nFLT-2026-0821-07,2026-08-21,18m 42s,92,2\\nFLT-2026-0820-03,2026-08-20,26m 11s,88,4\\nFLT-2026-0818-11,2026-08-18,12m 28s,97,0",
+                ],
+                { type: "text/csv" },
+              );
+              const link = document.createElement("a");
+              link.href = URL.createObjectURL(blob);
+              link.download = "idhtm-flight-log.csv";
+              link.click();
+              URL.revokeObjectURL(link.href);
+            }}
+          >
+            <Download size={15} /> Export log
+          </button>
+        }
+      />
+      <div className="table-toolbar">
+        <div className="search-input">
+          <Search size={15} />
+          <input placeholder="Search flights" />
+        </div>
+        <button className="icon-button">
+          <SlidersHorizontal size={17} />
+        </button>
+      </div>
+      <div className="data-table">
+        <div className="table-head">
+          <span>Flight ID</span>
+          <span>Date</span>
+          <span>Duration</span>
+          <span>Health</span>
+          <span>Alerts</span>
+          <span>Summary</span>
+          <span />
+        </div>
+        {flights.map((f) => (
+          <Link className="table-row" to={`/app/flights/${f.id}`} key={f.id}>
+            <strong>{f.id}</strong>
+            <span>{f.date}</span>
+            <span>{f.duration}</span>
+            <span className={f.health > 90 ? "text-green" : "text-amber"}>
+              {f.health} / 100
+            </span>
+            <span>{f.alerts}</span>
+            <span>{f.summary}</span>
+            <ChevronRight size={16} />
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
