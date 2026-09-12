@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useAuth } from '@clerk/react';
 import { initialTelemetry, seedAlerts } from '../data/mock';
 import type { Alert, Scenario, Telemetry } from '../types';
 
@@ -14,7 +15,7 @@ type DroneLocation = {
 
 const LOCATION_WS_URL = import.meta.env.VITE_LOCATION_WS_URL
   || (import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/telemetry').replace('/ws/telemetry', '/ws/drone-location');
-type Store = { telemetry: Telemetry; scenario: Scenario; setScenario: (s: Scenario) => void; simulatorActive: boolean; setSimulatorActive: (v: boolean) => void; alerts: Alert[]; acknowledgeAlert: (id: string) => void; user: { name: string; email: string } | null; signIn: (email: string, name?: string) => void; signOut: () => void; };
+type Store = { telemetry: Telemetry; scenario: Scenario; setScenario: (s: Scenario) => void; simulatorActive: boolean; setSimulatorActive: (v: boolean) => void; alerts: Alert[]; acknowledgeAlert: (id: string) => void; };
 const Context = createContext<Store | null>(null);
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/telemetry';
@@ -44,52 +45,66 @@ function deriveLocalAlerts(telemetry: Telemetry): Alert[] {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const { getToken } = useAuth();
   const [telemetry, setTelemetry] = useState(initialTelemetry);
   const [scenario, setScenarioState] = useState<Scenario>('normal');
   const [simulatorActive, setSimulatorActive] = useState(true);
   const [alerts, setAlerts] = useState(seedAlerts);
-  const [user, setUser] = useState<{ name: string; email: string } | null>(() => { const raw = localStorage.getItem('idhtm-user'); return raw ? JSON.parse(raw) : null; });
-  const setScenario = (next: Scenario) => { setScenarioState(next); void fetch(`${API_URL}/telemetry/scenario`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scenario: next }) }).catch(() => undefined); };
+  const postScenario = async (next: Scenario) => {
+    const token = await getToken();
+    void fetch(`${API_URL}/telemetry/scenario`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ scenario: next }) }).catch(() => undefined);
+  };
+  const setScenario = (next: Scenario) => { setScenarioState(next); void postScenario(next); };
 
   useEffect(() => {
     if (!simulatorActive) return;
     let fallbackTimer: number | undefined;
     let socket: WebSocket | undefined;
     let locationSocket: WebSocket | undefined;
+    let cancelled = false;
     const startFallback = () => { if (fallbackTimer) return; fallbackTimer = window.setInterval(() => setTelemetry(previous => nextLocalTelemetry(previous, scenario)), 1000); };
-    try {
-      socket = new WebSocket(WS_URL);
-      socket.onopen = () => { void fetch(`${API_URL}/telemetry/scenario`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scenario }) }).catch(() => undefined); };
-      socket.onmessage = event => { const payload = JSON.parse(event.data) as { telemetry?: Telemetry; alerts?: Alert[] }; if (payload.telemetry) setTelemetry(payload.telemetry); if (payload.alerts) setAlerts(previous => [ ...payload.alerts!.map(incoming => { const existing = previous.find(p => p.id === incoming.id); return existing ? { ...incoming, acknowledged: existing.acknowledged } : incoming; }), ...previous.filter(a => a.id.startsWith('LIVE-')) ]); };
-      socket.onerror = () => { startFallback(); };
+    const connect = async () => {
+      // Clerk's session token gets attached as a query param since the browser
+      // WebSocket API can't set custom headers during the handshake.
+      const token = await getToken();
+      if (cancelled) return;
+      const authQuery = token ? `${WS_URL.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : '';
+      const locationAuthQuery = token ? `${LOCATION_WS_URL.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : '';
       try {
-        locationSocket = new WebSocket(LOCATION_WS_URL);
-      
-        locationSocket.onmessage = event => {
-          const location = JSON.parse(event.data) as DroneLocation;
-      
-          if (typeof location.latitude === 'number' && typeof location.longitude === 'number') {
-            setTelemetry(previous => ({
-              ...previous,
-              timestamp: location.timestamp || previous.timestamp,
-              latitude: location.latitude,
-              longitude: location.longitude,
-              altitude: typeof location.altitude === 'number' ? location.altitude : previous.altitude,
-              heading: typeof location.heading === 'number' ? location.heading : previous.heading,
-            }));
-          }
-        };
-      
-        locationSocket.onerror = () => {
-          // The telemetry socket or local simulator remains the fallback.
-        };
-      } catch {
-        // The location stream is optional until the backend endpoint is available.
-      }
-    } catch { startFallback(); }
-    const timeout = window.setTimeout(() => { if (!socket || socket.readyState !== WebSocket.OPEN) startFallback(); }, 1500);
-    return () => { window.clearTimeout(timeout); if (fallbackTimer) window.clearInterval(fallbackTimer); socket?.close(); locationSocket?.close(); };
-  }, [scenario, simulatorActive]);
+        socket = new WebSocket(`${WS_URL}${authQuery}`);
+        socket.onopen = () => { void postScenario(scenario); };
+        socket.onmessage = event => { const payload = JSON.parse(event.data) as { telemetry?: Telemetry; alerts?: Alert[] }; if (payload.telemetry) setTelemetry(payload.telemetry); if (payload.alerts) setAlerts(previous => [ ...payload.alerts!.map(incoming => { const existing = previous.find(p => p.id === incoming.id); return existing ? { ...incoming, acknowledged: existing.acknowledged } : incoming; }), ...previous.filter(a => a.id.startsWith('LIVE-')) ]); };
+        socket.onerror = () => { startFallback(); };
+        try {
+          locationSocket = new WebSocket(`${LOCATION_WS_URL}${locationAuthQuery}`);
+
+          locationSocket.onmessage = event => {
+            const location = JSON.parse(event.data) as DroneLocation;
+
+            if (typeof location.latitude === 'number' && typeof location.longitude === 'number') {
+              setTelemetry(previous => ({
+                ...previous,
+                timestamp: location.timestamp || previous.timestamp,
+                latitude: location.latitude,
+                longitude: location.longitude,
+                altitude: typeof location.altitude === 'number' ? location.altitude : previous.altitude,
+                heading: typeof location.heading === 'number' ? location.heading : previous.heading,
+              }));
+            }
+          };
+
+          locationSocket.onerror = () => {
+            // The telemetry socket or local simulator remains the fallback.
+          };
+        } catch {
+          // The location stream is optional until the backend endpoint is available.
+        }
+      } catch { startFallback(); }
+      window.setTimeout(() => { if (!socket || socket.readyState !== WebSocket.OPEN) startFallback(); }, 1500);
+    };
+    void connect();
+    return () => { cancelled = true; if (fallbackTimer) window.clearInterval(fallbackTimer); socket?.close(); locationSocket?.close(); };
+  }, [scenario, simulatorActive, getToken]);
 
   useEffect(() => { 
     // If telemetry came from the backend, we don't want to generate duplicate local alerts.
@@ -106,7 +121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return [...next, ...previous.filter(a => !a.id.startsWith('LIVE-'))].slice(0, 8);
     });
   }, [telemetry]);
-  const value = useMemo(() => ({ telemetry, scenario, setScenario, simulatorActive, setSimulatorActive, alerts, acknowledgeAlert: (id: string) => setAlerts(previous => previous.map(a => a.id === id ? { ...a, acknowledged: true } : a)), user, signIn: (email: string, name = 'Flight Operator') => { const next = { email, name }; localStorage.setItem('idhtm-user', JSON.stringify(next)); setUser(next); }, signOut: () => { localStorage.removeItem('idhtm-user'); setUser(null); } }), [telemetry, scenario, simulatorActive, alerts, user]);
+  const value = useMemo(() => ({ telemetry, scenario, setScenario, simulatorActive, setSimulatorActive, alerts, acknowledgeAlert: (id: string) => setAlerts(previous => previous.map(a => a.id === id ? { ...a, acknowledged: true } : a)) }), [telemetry, scenario, simulatorActive, alerts]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useApp() { const ctx = useContext(Context); if (!ctx) throw new Error('useApp must be used inside AppProvider'); return ctx; }

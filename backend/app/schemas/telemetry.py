@@ -26,8 +26,3 @@ class TelemetryEvent(BaseModel):
 
 class ScenarioRequest(BaseModel):
     scenario: str
-
-class Credentials(BaseModel):
-    email: str
-    password: str
-    name: str | None = None
