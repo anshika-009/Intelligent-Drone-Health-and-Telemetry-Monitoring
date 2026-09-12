@@ -1,10 +1,11 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+
 class TelemetryEvent(BaseModel):
     timestamp: datetime
-    drone_id: str = 'DRONE-01'
-    flight_id: str = 'FLT-LIVE-01'
+    drone_id: str = "DRONE-01"
+    flight_id: str = "FLT-LIVE-01"
     latitude: float
     longitude: float
     altitude: float
@@ -24,8 +25,10 @@ class TelemetryEvent(BaseModel):
     motor_outputs: list[float]
     health_score: int = Field(ge=0, le=100)
 
+
 class ScenarioRequest(BaseModel):
     scenario: str
+
 
 class Credentials(BaseModel):
     email: str
