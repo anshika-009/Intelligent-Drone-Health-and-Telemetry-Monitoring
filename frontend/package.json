@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@clerk/react": "^6.15.2",
     "@vitejs/plugin-react": "latest",
     "framer-motion": "latest",
     "leaflet": "^1.9.4",

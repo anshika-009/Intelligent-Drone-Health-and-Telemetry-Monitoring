@@ -1,5 +1,6 @@
 import { Filter } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/react";
 import { AlertRow, Metric, SectionHeading } from "../../components/common";
 import { useApp } from "../../store/AppStore";
 import { telemetryService } from "../../services/api";
@@ -7,10 +8,20 @@ import { telemetryService } from "../../services/api";
 export function AlertsPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const { acknowledgeAlert } = useApp();
+  const { getToken } = useAuth();
 
   useEffect(() => {
-    telemetryService.alerts().then((data) => setAlerts(data as any[]));
-  }, []);
+    let mounted = true;
+    const loadAlerts = async () => {
+      const token = await getToken();
+      const data = await telemetryService.alerts(token);
+      if (mounted) setAlerts(data as any[]);
+    };
+    void loadAlerts();
+    return () => {
+      mounted = false;
+    };
+  }, [getToken]);
 
   return (
     <div className="page">
