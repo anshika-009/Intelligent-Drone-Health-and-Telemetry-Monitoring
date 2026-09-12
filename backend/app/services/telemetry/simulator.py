@@ -60,7 +60,7 @@ class Simulator:
             "az": 0.0,
         }
 
-        mav_url = os.environ.get("MAVLINK_URL", "udp:127.0.0.1:14550")
+        mav_url = os.environ.get("MAVLINK_URL", "udp:host.docker.internal:14550")
         print(f"BRIDGE ONLINE: Connecting to MAVLink stream at {mav_url}", flush=True)
         try:
             self.master = mavutil.mavlink_connection(mav_url) if mavutil else None
