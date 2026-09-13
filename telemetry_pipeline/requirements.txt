@@ -1,0 +1,2 @@
+pydantic>=2.0.0
+pymavlink>=2.4.0

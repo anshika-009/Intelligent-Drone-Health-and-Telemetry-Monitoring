@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+*.tlog
+*.bin
+scratch*
+test_list.txt
