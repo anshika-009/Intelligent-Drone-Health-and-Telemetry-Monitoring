@@ -322,4 +322,6 @@ html.dark .cockpit-page {
   background: linear-gradient(145deg, #08131f 0%, #122538 53%, #0b1927 100%);
   color: #edf7fb;
 }
+html.dark .cockpit-top.cockpit-top h1{color:white}
+html.dark .cockpit-top .ghost-light{border-color:rgba(137,210,231,.5);background:rgba(93,182,209,.12);color:white}
 /* 145deg,#08131f 0%,#122538 53%,#0b1927 100% */
