@@ -16,6 +16,7 @@ services:
       IDHTM_ENV: development
       DATABASE_URL: postgresql://idhtm:idhtm_dev@postgres:5432/idhtm
       MAVLINK_URL: "tcp:host.docker.internal:14552" 
+      CLERK_JWKS_URL: "${CLERK_JWKS_URL}"
     ports:
       - "8000:8000"
     depends_on:
@@ -26,6 +27,7 @@ services:
     environment:
       VITE_API_URL: http://localhost:8000/api
       VITE_WS_URL: ws://localhost:8000/ws/telemetry
+      VITE_CLERK_PUBLISHABLE_KEY: "${VITE_CLERK_PUBLISHABLE_KEY}"
     ports:
       - "5173:5173"
     depends_on:
