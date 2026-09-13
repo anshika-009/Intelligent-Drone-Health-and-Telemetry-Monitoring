@@ -3,6 +3,8 @@ import { useAuth } from '@clerk/react';
 import { initialTelemetry, seedAlerts } from '../data/mock';
 import type { Alert, Scenario, Telemetry } from '../types';
 
+export type Theme = 'light' | 'dark';
+
 type DroneLocation = {
   drone_id?: string;
   flight_id?: string;
@@ -15,7 +17,9 @@ type DroneLocation = {
 
 const LOCATION_WS_URL = import.meta.env.VITE_LOCATION_WS_URL
   || (import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/telemetry').replace('/ws/telemetry', '/ws/drone-location');
-type Store = { telemetry: Telemetry; scenario: Scenario; setScenario: (s: Scenario) => void; simulatorActive: boolean; setSimulatorActive: (v: boolean) => void; alerts: Alert[]; acknowledgeAlert: (id: string) => void; };
+type Store = { telemetry: Telemetry; scenario: Scenario; setScenario: (s: Scenario) => void; simulatorActive: boolean; setSimulatorActive: (v: boolean) => void; alerts: Alert[]; acknowledgeAlert: (id: string) => void; theme: Theme;
+  toggleTheme: () => void; };
+
 const Context = createContext<Store | null>(null);
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/telemetry';
@@ -31,8 +35,10 @@ function nextLocalTelemetry(previous: Telemetry, scenario: Scenario): Telemetry 
   if (scenario === 'gps_loss' || (scenario === 'multi_fault' && Math.sin(Date.now() / 4000) > .2)) gps = false;
   if (scenario === 'multi_fault') temperature = Math.min(74, previous.temperature + .02);
   const health = Math.max(42, Math.round(100 - (100 - battery) * .2 - (100 - signal) * .18 - vibration * 30 - (gps ? 0 : 18) - Math.max(0, temperature - 55) * .4));
-  return { ...previous, timestamp: new Date().toISOString(),latitude: previous.latitude + Math.cos(Date.now() / 2400) * 0.00008,
-    longitude: previous.longitude + Math.sin(Date.now() / 2100) * 0.0001, altitude: Math.max(74, Math.min(162, previous.altitude + Math.sin(Date.now() / 2700) * 1.5)), ground_speed: Math.max(18, 42 + Math.sin(Date.now() / 1500) * 7), vertical_speed: Math.sin(Date.now() / 1100) * 2, heading: (previous.heading + .8) % 360, battery_percentage: Math.max(15, battery), signal_strength: Math.max(24, signal), vibration, gps_fix: gps, gps_satellites: gps ? 14 : 0, temperature, health_score: health, estimated_remaining_flight_time: Math.round(Math.max(5, battery * .21)) };
+  return {
+    ...previous, timestamp: new Date().toISOString(), latitude: previous.latitude + Math.cos(Date.now() / 2400) * 0.00008,
+    longitude: previous.longitude + Math.sin(Date.now() / 2100) * 0.0001, altitude: Math.max(74, Math.min(162, previous.altitude + Math.sin(Date.now() / 2700) * 1.5)), ground_speed: Math.max(18, 42 + Math.sin(Date.now() / 1500) * 7), vertical_speed: Math.sin(Date.now() / 1100) * 2, heading: (previous.heading + .8) % 360, battery_percentage: Math.max(15, battery), signal_strength: Math.max(24, signal), vibration, gps_fix: gps, gps_satellites: gps ? 14 : 0, temperature, health_score: health, estimated_remaining_flight_time: Math.round(Math.max(5, battery * .21))
+  };
 }
 
 function deriveLocalAlerts(telemetry: Telemetry): Alert[] {
@@ -50,6 +56,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [scenario, setScenarioState] = useState<Scenario>('normal');
   const [simulatorActive, setSimulatorActive] = useState(true);
   const [alerts, setAlerts] = useState(seedAlerts);
+
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem('idhtm-theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('idhtm-theme', theme);
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+
   const postScenario = async (next: Scenario) => {
     const token = await getToken();
     void fetch(`${API_URL}/telemetry/scenario`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ scenario: next }) }).catch(() => undefined);
@@ -73,7 +97,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         socket = new WebSocket(`${WS_URL}${authQuery}`);
         socket.onopen = () => { void postScenario(scenario); };
-        socket.onmessage = event => { const payload = JSON.parse(event.data) as { telemetry?: Telemetry; alerts?: Alert[] }; if (payload.telemetry) setTelemetry(payload.telemetry); if (payload.alerts) setAlerts(previous => [ ...payload.alerts!.map(incoming => { const existing = previous.find(p => p.id === incoming.id); return existing ? { ...incoming, acknowledged: existing.acknowledged } : incoming; }), ...previous.filter(a => a.id.startsWith('LIVE-')) ]); };
+        socket.onmessage = event => { const payload = JSON.parse(event.data) as { telemetry?: Telemetry; alerts?: Alert[] }; if (payload.telemetry) setTelemetry(payload.telemetry); if (payload.alerts) setAlerts(previous => [...payload.alerts!.map(incoming => { const existing = previous.find(p => p.id === incoming.id); return existing ? { ...incoming, acknowledged: existing.acknowledged } : incoming; }), ...previous.filter(a => a.id.startsWith('LIVE-'))]); };
         socket.onerror = () => { startFallback(); };
         try {
           locationSocket = new WebSocket(`${LOCATION_WS_URL}${locationAuthQuery}`);
@@ -106,12 +130,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; if (fallbackTimer) window.clearInterval(fallbackTimer); socket?.close(); locationSocket?.close(); };
   }, [scenario, simulatorActive, getToken]);
 
-  useEffect(() => { 
+  useEffect(() => {
     // If telemetry came from the backend, we don't want to generate duplicate local alerts.
     // We can rely on the fact that if a websocket is connected, we shouldn't derive local alerts.
     // We'll use a simple heuristic: if simulatorActive is true and we haven't fallen back, we assume backend is handling alerts.
     // However, to be perfectly safe without adding more state, we just filter out LIVE- alerts if we're generating them.
-    const next = deriveLocalAlerts(telemetry); 
+    const next = deriveLocalAlerts(telemetry);
     setAlerts(previous => {
       const hasBackendAlerts = previous.some(a => a.id.startsWith('RULE-'));
       // If we have active backend alerts, skip local generation to avoid duplicates.
@@ -121,7 +145,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return [...next, ...previous.filter(a => !a.id.startsWith('LIVE-'))].slice(0, 8);
     });
   }, [telemetry]);
-  const value = useMemo(() => ({ telemetry, scenario, setScenario, simulatorActive, setSimulatorActive, alerts, acknowledgeAlert: (id: string) => setAlerts(previous => previous.map(a => a.id === id ? { ...a, acknowledged: true } : a)) }), [telemetry, scenario, simulatorActive, alerts]);
+  const value = useMemo(() => ({ telemetry, scenario, setScenario, simulatorActive, setSimulatorActive, alerts, acknowledgeAlert: (id: string) => setAlerts(previous => previous.map(a => a.id === id ? { ...a, acknowledged: true } : a)),theme,toggleTheme }), [telemetry, scenario, simulatorActive, alerts,theme]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useApp() { const ctx = useContext(Context); if (!ctx) throw new Error('useApp must be used inside AppProvider'); return ctx; }
