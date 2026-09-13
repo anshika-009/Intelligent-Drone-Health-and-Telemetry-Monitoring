@@ -42,7 +42,7 @@
 
 /* Final requested correction pass. */
 .dashboard-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.map-card{grid-column:2;grid-row:1}.decision-panel{grid-column:1;grid-row:2}.flight-status{grid-column:2;grid-row:2}.telemetry-panel{grid-column:1 / span 2;grid-row:3}.alert-panel{grid-column:1 / span 2;grid-row:4}
-.cockpit-page{background:linear-gradient(145deg,#08131f 0%,#122538 53%,#0b1927 100%);color:#edf7fb}.cockpit-page .eyebrow{color:#87b8c9}.cockpit-page .eyebrow-line{background:#5dd5ee}.cockpit-top h1{color:#f4fbff}.cockpit-top .ghost-light{border-color:rgba(137,210,231,.5);background:rgba(93,182,209,.12);color:#dff8ff}.cockpit-instruments{filter:drop-shadow(0 18px 28px rgba(0,0,0,.24))}.horizon{border-color:#35566a;background:#07131e;box-shadow:0 0 0 1px #6fadb9,0 16px 55px rgba(0,0,0,.38)}.horizon-sky{background:linear-gradient(#5aa5c8 0 50%,#29445b 50% 100%)}.horizon-line{background:#f6fbf8;box-shadow:0 14px #f6fbf8,-20px -15px #f6fbf8,20px -15px #f6fbf8}.aircraft-mark,.heading strong{color:#ffd166}.side-instrument{border-color:#396276;background:linear-gradient(145deg,rgba(33,59,76,.96),rgba(12,33,49,.96));box-shadow:inset 0 1px 0 rgba(166,226,237,.12)}.side-instrument>span,.vertical-tape{color:#a5c3ce}.vertical-tape{border-color:#486c7c}.vertical-tape i{background:#ffd166}.vertical-tape.right i{background:#61dfbf}.cockpit-readouts{border-top-color:#29495b}.cockpit-readouts .metric-label{color:#9fc2cf}.cockpit-readouts .metric strong{color:#effaff}.cockpit-readouts .metric.healthy strong{color:#61dfbf}.cockpit-readouts .metric.critical strong{color:#ff8d86}
+.cockpit-page{background:linear-gradient(135deg,#EDF5F7 0%,#EAF2F5 55%,#E2EEF2 100%);color:#edf7fb}.cockpit-page .eyebrow{color:#87b8c9}.cockpit-page .eyebrow-line{background:#5dd5ee}.cockpit-top h1{color:#1579b3}.cockpit-top .ghost-light{border-color:rgba(137,210,231,.5);background:rgba(93,182,209,.12);color:#1750d5}.cockpit-instruments{filter:drop-shadow(0 18px 28px rgba(0,0,0,.24))}.horizon{border-color:#35566a;background:#07131e;box-shadow:0 0 0 1px #6fadb9,0 16px 55px rgba(0,0,0,.38)}.horizon-sky{background:linear-gradient(#5aa5c8 0 50%,#29445b 50% 100%)}.horizon-line{background:#f6fbf8;box-shadow:0 14px #f6fbf8,-20px -15px #f6fbf8,20px -15px #f6fbf8}.aircraft-mark,.heading strong{color:#ffd166}.side-instrument{border-color:#396276;background:linear-gradient(145deg,rgba(33,59,76,.96),rgba(12,33,49,.96));box-shadow:inset 0 1px 0 rgba(166,226,237,.12)}.side-instrument>span,.vertical-tape{color:#a5c3ce}.vertical-tape{border-color:#486c7c}.vertical-tape i{background:#ffd166}.vertical-tape.right i{background:#61dfbf}.cockpit-readouts{border-top-color:#29495b}.cockpit-readouts .metric-label{color:#9fc2cf}.cockpit-readouts .metric strong{color:#effaff}.cockpit-readouts .metric.healthy strong{color:#61dfbf}.cockpit-readouts .metric.critical strong{color:#ff8d86}
 .component-detail{background-image:linear-gradient(90deg,rgba(255,255,255,.03) 0%,rgba(255,255,255,.08) 35%,rgba(255,255,255,.9) 57%,rgba(255,255,255,.97) 100%),var(--component-image)}.component-detail-image{background:rgba(229,239,240,.28)}.component-detail-image img{opacity:1;mix-blend-mode:normal;object-fit:contain;padding:30px}.component-card img{opacity:1;mix-blend-mode:normal;background:#eff6f5}.component-card{min-height:88px}.component-detail-copy{background:rgba(255,255,255,.88)}
 .replay-stage.map-scene{isolation:isolate;overflow:hidden;z-index:0}.replay-controls{position:relative;z-index:5;border-top:1px solid #d6e0e3;background:#fff}.replay-panel{position:relative;isolation:isolate;overflow:hidden}
 @media (max-width:760px){.map-card,.decision-panel,.flight-status,.telemetry-panel,.alert-panel{grid-column:auto;grid-row:auto}.flight-status{order:4}.decision-panel{order:3}.replay-stage.map-scene{height:300px}.component-detail{background-image:linear-gradient(180deg,rgba(255,255,255,.03) 0%,rgba(255,255,255,.12) 34%,rgba(255,255,255,.94) 48%),var(--component-image)}}
@@ -61,3 +61,265 @@
 
 
 .map-provider-shell{position:relative;overflow:hidden}.map-provider-shell>.map-visual{margin:0}.map-provider-note{position:absolute;z-index:6;left:12px;right:12px;bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border:1px solid rgba(210,223,224,.92);background:rgba(250,252,251,.9);backdrop-filter:blur(8px);color:#60747d;font:9px 'DM Mono';letter-spacing:.04em}.map-provider-note strong{color:var(--blue);font:9px 'DM Mono';letter-spacing:.08em;white-space:nowrap}.live-google-map{position:relative;overflow:hidden;height:235px;margin-top:22px;background:#e6efed}.live-google-map-canvas{width:100%;height:100%}.live-map-topline{position:absolute;z-index:5;top:12px;left:12px;right:12px;display:flex;align-items:center;justify-content:space-between;pointer-events:none}.live-map-topline span,.live-map-topline strong{padding:6px 8px;background:rgba(255,255,255,.86);color:#526c77;font:9px 'DM Mono';letter-spacing:.08em}.live-map-topline span{display:flex;align-items:center;gap:6px}.live-map-topline strong{color:var(--blue)}.live-map-readout{position:absolute;z-index:5;left:12px;bottom:12px;display:flex;gap:9px;padding:7px 9px;border-left:2px solid var(--blue);background:rgba(255,255,255,.88);color:#526c77;font:9px 'DM Mono';letter-spacing:.04em;pointer-events:none}.live-map-readout span+span{padding-left:9px;border-left:1px solid #d8e2e3}.live-google-map .map-attribution{color:#516f7b;background:rgba(255,255,255,.52);padding:3px 4px}.idhtm-openstreet-map .leaflet-container{height:100%;width:100%;background:#e6efed;font-family:'DM Mono',monospace}.idhtm-openstreet-map .leaflet-control-zoom{margin:56px 12px 0 0;border:1px solid rgba(210,223,224,.92);box-shadow:0 8px 20px rgba(55,82,91,.08)}.idhtm-openstreet-map .leaflet-control-zoom a{width:30px;height:30px;line-height:30px;color:#2364a1;background:rgba(255,255,255,.92);border-bottom-color:#d8e2e3;font-weight:700}.idhtm-openstreet-map .leaflet-control-attribution{font-size:9px;background:rgba(255,255,255,.76);color:#516f7b}.idhtm-openstreet-map .leaflet-control-attribution a{color:#2364a1}.idhtm-leaflet-drone-icon{background:transparent!important;border:0!important}.idhtm-leaflet-drone{position:relative;width:32px;height:32px;border:2px solid #fff;border-radius:50%;background:#2364a1;box-shadow:0 0 0 5px rgba(35,100,161,.16),0 5px 14px rgba(35,100,161,.3);display:grid;place-items:center;color:#fff}.idhtm-leaflet-drone:before{content:'';width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:11px solid #fff;transform:translateY(-1px)}.idhtm-leaflet-drone span{position:absolute;inset:-10px;border:1px solid rgba(35,100,161,.28);border-radius:50%}.idhtm-openstreet-map .live-map-readout{z-index:1000}.idhtm-openstreet-map .map-attribution{z-index:1000}@media (max-width:760px){.idhtm-openstreet-map .leaflet-control-zoom{margin-top:54px;margin-right:8px}.idhtm-openstreet-map .leaflet-control-zoom a{width:28px;height:28px;line-height:28px}}@media (max-width:760px){.live-google-map{height:260px}.map-provider-note{display:block;line-height:1.5}.map-provider-note strong{display:block;margin-top:4px}.live-map-topline span,.live-map-topline strong{font-size:8px}.live-map-readout{right:12px;display:flex;flex-wrap:wrap;gap:5px}.live-map-readout span+span{padding-left:5px}}
+/* ==========================================================================
+   Dark Mode System Variables & Component Overrides
+   ========================================================================== */
+
+html.dark {
+  color-scheme: dark;
+  --ink: #e6edf3;
+  --muted: #8b949e;
+  --line: #30363d;
+  --surface: #161b22;
+  --ivory: #0d1117;
+  --blue: #58a6ff;
+  --blue-deep: #1f6feb;
+  --green: #3fb950;
+  --amber: #d29922;
+  --red: #f85149;
+  --shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+}
+
+html.dark body {
+  background: var(--ivory);
+  color: var(--ink);
+}
+
+/* Base shell & Sidebar */
+html.dark .app-shell {
+  background: var(--ivory);
+}
+
+html.dark .sidebar,
+html.dark .topbar {
+  background: #161b22;
+  border-color: var(--line);
+}
+
+html.dark .sidebar-drone {
+  background: #0d1117;
+  border-color: var(--line);
+}
+
+html.dark .drone-avatar {
+  background: #1f2937;
+  color: var(--blue);
+}
+
+html.dark .side-link {
+  color: #8b949e;
+}
+
+html.dark .side-link:hover {
+  background: #21262d;
+  color: #f0f6fc;
+}
+
+html.dark .side-link.active {
+  background: #1f2937;
+  color: var(--blue);
+}
+
+html.dark .side-link b {
+  background: #3c1e1e;
+  color: var(--red);
+}
+
+html.dark .breadcrumb strong {
+  color: #c9d1d9;
+}
+
+/* Panels & Cards */
+html.dark .panel,
+html.dark .trend-panel,
+html.dark .report-card,
+html.dark .component-card,
+html.dark .alert-list,
+html.dark .data-table,
+html.dark .settings-list,
+html.dark .maintenance-hero,
+html.dark .maintenance-list,
+html.dark .alert-summary .metric,
+html.dark .replay-metrics .metric {
+  background: #161b22;
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+html.dark .status-strip {
+  background: #131b23;
+  border-color: var(--line);
+}
+
+html.dark .decision-panel {
+  background: linear-gradient(135deg, #131e28, #161b22);
+  border-color: #274059;
+}
+
+html.dark .decision-mark {
+  background: #12281d;
+  border-color: #1e4b30;
+}
+
+html.dark .decision-action p {
+  color: var(--muted);
+}
+
+/* Form Controls & Buttons */
+html.dark .icon-button,
+html.dark .button.ghost {
+  background: #21262d;
+  border-color: var(--line);
+  color: #c9d1d9;
+}
+
+html.dark .icon-button:hover,
+html.dark .button.ghost:hover {
+  background: #30363d;
+  border-color: #8b949e;
+  color: var(--blue);
+}
+
+html.dark .button.secondary {
+  background: #1f2937;
+  border-color: var(--line);
+  color: var(--blue);
+}
+
+html.dark .button.secondary:hover {
+  background: #2b3846;
+}
+
+html.dark .search-input {
+  background: #0d1117;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+html.dark .search-input input {
+  color: var(--ink);
+}
+
+/* Status Pills */
+html.dark .status-pill {
+  background: #161b22;
+  border-color: var(--line);
+  color: #c9d1d9;
+}
+
+html.dark .status-pill.green {
+  background: #0e2417;
+  border-color: #194f2d;
+  color: #3fb950;
+}
+
+html.dark .status-pill.amber {
+  background: #2d1d0e;
+  border-color: #5c3b17;
+  color: #d29922;
+}
+
+html.dark .status-pill.red {
+  background: #2f1515;
+  border-color: #5b2121;
+  color: #f85149;
+}
+
+html.dark .status-pill.blue {
+  background: #10243e;
+  border-color: #1d4373;
+  color: #58a6ff;
+}
+
+html.dark .status-pill.gray {
+  background: #21262d;
+  color: #8b949e;
+}
+
+/* Tables & Lists */
+html.dark .table-head {
+  background: #0d1117;
+  color: var(--muted);
+}
+
+html.dark .table-row:hover {
+  background: #1c2128;
+}
+
+html.dark .setting-row>span:last-child {
+  background: #0e2417;
+  border-color: #194f2d;
+  color: #3fb950;
+}
+
+/* Scenario & Diagnostics */
+html.dark .scenario-picker {
+  background: #161b22;
+  border-color: var(--line);
+}
+
+html.dark .scenario-options button {
+  background: #0d1117;
+  border-color: var(--line);
+}
+
+html.dark .scenario-options button span {
+  color: var(--ink);
+}
+
+html.dark .scenario-options button:hover,
+html.dark .scenario-options button.selected {
+  background: #1f2937;
+  border-color: var(--blue);
+}
+
+/* Health and Component Overlays */
+html.dark .health-card {
+  background-color: #121820;
+  background-image: linear-gradient(90deg, rgba(22,27,34,.96) 0%, rgba(22,27,34,.88) 50%, rgba(22,27,34,.6) 100%), var(--health-image);
+}
+
+html.dark .health-card .health-components {
+  background: rgba(13, 17, 23, 0.7);
+  border-top-color: var(--line);
+}
+
+html.dark .score-ring:after {
+  background: #161b22;
+}
+
+html.dark .component-card img {
+  background: #21262d;
+}
+
+html.dark .component-card:hover,
+html.dark .component-card.selected {
+  background: #1f2937;
+  border-color: var(--blue);
+}
+
+html.dark .component-detail-copy {
+  background: rgba(22, 27, 34, 0.94);
+}
+
+/* Replay & Maps */
+html.dark .replay-controls {
+  background: #161b22;
+  border-color: var(--line);
+}
+
+html.dark .speed-buttons button {
+  background: #0d1117;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+html.dark .speed-buttons button.active {
+  background: #1f2937;
+  color: var(--blue);
+}
+html.dark .cockpit-page {
+  background: linear-gradient(145deg, #08131f 0%, #122538 53%, #0b1927 100%);
+  color: #edf7fb;
+}
+/* 145deg,#08131f 0%,#122538 53%,#0b1927 100% */
