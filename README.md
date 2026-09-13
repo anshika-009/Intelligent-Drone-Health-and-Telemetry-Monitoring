@@ -38,9 +38,7 @@ The API is available at `http://localhost:8000`. Health check: `GET /api/healthc
 
 ### Simulator
 
-The simulator is available in the application dashboard. Choose a scenario from the scenario control, then start or pause the feed. Supported scenarios are Normal Flight, Low Battery, GPS Loss, Signal Degradation, Motor Vibration, and Multi-Fault. Each scenario changes actual telemetry and produces rule-based health and alert output.
-
-Demo credentials are intentionally simple for local development: any valid email and a password with at least six characters are accepted by the UI fallback. The backend seeds `operator@idhtm.dev` with password `demo-flight`.
+ArduPilot simulator is available in the application dashboard from which latest telemetry is received. Choose a scenario from the scenario control, then start or pause the feed. Supported scenarios are Normal Flight, Low Battery, GPS Loss, Signal Degradation, Motor Vibration, and Multi-Fault. Each scenario changes actual telemetry and produces rule-based health and alert output.
 
 ## Docker
 
