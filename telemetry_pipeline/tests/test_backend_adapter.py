@@ -25,7 +25,10 @@ class TestBackendAdapter(unittest.TestCase):
             temperature=45.2,
             signal_strength=92.0,
             gps_fix=True,
-            gps_satellites=12
+            gps_satellites=12,
+            ax=1.2,
+            ay=-0.8,
+            az=9.7
         )
         
         self.empty_state = VehicleState(
@@ -46,12 +49,12 @@ class TestBackendAdapter(unittest.TestCase):
     def test_02_empty_state_fallbacks(self):
         output = adapt_to_backend(self.empty_state)
         
-        self.assertEqual(output['latitude'], 0.0)
-        self.assertEqual(output['longitude'], 0.0)
-        self.assertEqual(output['battery_voltage'], 0.0)
-        self.assertEqual(output['signal_strength'], 0.0)
-        self.assertEqual(output['gps_fix'], False)
-        self.assertEqual(output['gps_satellites'], 0)
+        self.assertIsNone(output['latitude'])
+        self.assertIsNone(output['longitude'])
+        self.assertIsNone(output['battery_voltage'])
+        self.assertIsNone(output['signal_strength'])
+        self.assertIsNone(output['gps_fix'])
+        self.assertIsNone(output['gps_satellites'])
 
     def test_03_voltage_alias(self):
         output = adapt_to_backend(self.populated_state)
@@ -84,7 +87,38 @@ class TestBackendAdapter(unittest.TestCase):
         out2 = adapt_to_backend(self.empty_state)
         
         self.assertEqual(out1['battery_voltage'], 11.4)
-        self.assertEqual(out2['battery_voltage'], 0.0)
+        self.assertIsNone(out2['battery_voltage'])
+
+    def test_09_imu_acceleration_mapping(self):
+        output = adapt_to_backend(self.populated_state)
+
+        self.assertEqual(output["ax"], 1.2)
+        self.assertEqual(output["ay"], -0.8)
+        self.assertEqual(output["az"], 9.7)
+
+    def test_10_none_values_are_preserved(self):
+        state = VehicleState(
+            timestamp=datetime.now(timezone.utc)
+        )
+
+        output = adapt_to_backend(state)
+
+        self.assertIsNone(output["latitude"])
+        self.assertIsNone(output["longitude"])
+        self.assertIsNone(output["altitude"])
+        self.assertIsNone(output["ground_speed"])
+        self.assertIsNone(output["airspeed"])
+        self.assertIsNone(output["vertical_speed"])
+        self.assertIsNone(output["heading"])
+        self.assertIsNone(output["battery_percentage"])
+        self.assertIsNone(output["battery_voltage"])
+        self.assertIsNone(output["temperature"])
+        self.assertIsNone(output["signal_strength"])
+        self.assertIsNone(output["gps_fix"])
+        self.assertIsNone(output["gps_satellites"])
+        self.assertIsNone(output["ax"])
+        self.assertIsNone(output["ay"])
+        self.assertIsNone(output["az"])
 
 if __name__ == '__main__':
     unittest.main()
