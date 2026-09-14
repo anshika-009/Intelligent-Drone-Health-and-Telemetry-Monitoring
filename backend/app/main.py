@@ -1,4 +1,16 @@
 import asyncio
+
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../telemetry_pipeline')))
+try:
+    from src.orchestrator.pipeline_runner import PipelineRunner
+    from src.integration.backend_adapter import adapt_to_backend
+    PIPELINE_AVAILABLE = True
+except ImportError:
+    PIPELINE_AVAILABLE = False
+from app.services.health.engine import calculate_health
+
 from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +32,20 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+
+pipeline_runner = None
+latest_telemetry_state = None
+
+async def telemetry_polling_loop():
+    global latest_telemetry_state
+    while True:
+        if pipeline_runner and pipeline_runner.poll_once():
+            state = pipeline_runner.get_state()
+            legacy_dict = adapt_to_backend(state)
+            legacy_dict['health_score'] = calculate_health(legacy_dict)
+            latest_telemetry_state = legacy_dict
+        await asyncio.sleep(0.02)
 
 simulator = Simulator()
 
@@ -66,6 +92,13 @@ flights = [
 def startup() -> None:
     initialize()
 
+    global pipeline_runner
+    if PIPELINE_AVAILABLE:
+        pipeline_runner = PipelineRunner(connection_string=os.environ.get('MAVLINK_URL', 'udp:127.0.0.1:14550'))
+        pipeline_runner.start()
+        asyncio.create_task(telemetry_polling_loop())
+
+
 @app.get('/api/healthcheck')
 def healthcheck():
     return {
@@ -100,13 +133,13 @@ def set_scenario(request: ScenarioRequest, user_id: str = Depends(get_current_us
 
 @app.get('/api/telemetry/latest')
 def latest(user_id: str = Depends(get_current_user)):
-    event = simulator.next()
+    event = latest_telemetry_state.copy() if latest_telemetry_state else simulator.next()
     persist_telemetry(event, simulator.scenario)
     return event
 
 @app.get('/api/health')
 def health(user_id: str = Depends(get_current_user)):
-    event = simulator.next()
+    event = latest_telemetry_state.copy() if latest_telemetry_state else simulator.next()
     return {
         'scenario': simulator.scenario,
         'score': event['health_score'],
@@ -116,7 +149,7 @@ def health(user_id: str = Depends(get_current_user)):
 
 @app.get('/api/alerts')
 def alerts(user_id: str = Depends(get_current_user)):
-    event = simulator.next()
+    event = latest_telemetry_state.copy() if latest_telemetry_state else simulator.next()
     base_alerts = [
         {
             **rule,
@@ -232,7 +265,7 @@ async def telemetry_socket(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            event = simulator.next()
+            event = latest_telemetry_state.copy() if latest_telemetry_state else simulator.next()
             persist_telemetry(event, simulator.scenario)
 
             # --- AI RULE ENGINE INTEGRATION START ---
@@ -294,7 +327,7 @@ async def drone_location_socket(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            event = simulator.next()
+            event = latest_telemetry_state.copy() if latest_telemetry_state else simulator.next()
             await websocket.send_json(
                 {
                     'drone_id': 'DRONE-01',

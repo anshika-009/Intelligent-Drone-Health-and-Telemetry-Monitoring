@@ -12,7 +12,7 @@ import type { ReactNode } from "react";
 export function Brand({ light = false }: { light?: boolean }) {
   return (
     <Link
-      to="/"
+      to="/app/dashboard"
       className={`brand ${light ? "brand-light" : ""}`}
       aria-label="IDHTM home"
     >

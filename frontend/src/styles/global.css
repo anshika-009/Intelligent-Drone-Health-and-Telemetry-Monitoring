@@ -2388,7 +2388,7 @@ input:focus-visible {
   color: #a1abb1;
 }
 .mobile-only {
-  display: none;
+  /* display: none; */
 }
 @keyframes pulse {
   0%,
@@ -2453,33 +2453,6 @@ input:focus-visible {
   .table-head,
   .table-row {
     grid-template-columns: 1.2fr 1.2fr 0.7fr 0.7fr 0.5fr 1.5fr 18px;
-  }
-  .sidebar {
-    left: -248px;
-    transition: 0.25s;
-    box-shadow: 0 0 30px rgba(0, 0, 0, 0.13);
-  }
-  .sidebar.open {
-    left: 0;
-  }
-  .app-main {
-    width: 100%;
-    margin-left: 0;
-  }
-  .topbar {
-    height: 64px;
-    padding: 0 5%;
-  }
-  .mobile-only {
-    display: grid;
-  }
-  .breadcrumb {
-    margin-right: auto;
-    margin-left: 13px;
-  }
-  .top-status,
-  .user-name {
-    display: none;
   }
 }
 @media (max-width: 760px) {
@@ -4919,3 +4892,30 @@ html.dark .toggle-switch {
 .settings-heading-right .section-heading>div{display:flex;flex-direction:column;align-items:center}
 .settings-heading-right .eyebrow{justify-content:center}
 .settings-heading-right p{margin:12px auto 0}
+  .sidebar {
+    left: -248px;
+    transition: 0.25s;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.13);
+  }
+  .sidebar.open {
+    left: 0;
+  }
+  .app-main {
+    width: 100%;
+    margin-left: 0;
+  }
+  .topbar {
+    height: 64px;
+    padding: 0 5%;
+  }
+  .mobile-only {
+    display: grid;
+  }
+  .breadcrumb {
+    margin-right: auto;
+    margin-left: 13px;
+  }
+  .top-status,
+  .user-name {
+    display: none;
+  }
