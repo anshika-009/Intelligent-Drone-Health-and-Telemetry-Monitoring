@@ -4914,21 +4914,8 @@ html.dark .toggle-switch {
 }
 
 /* --- Settings: page heading --- */
-.settings-heading-center {
-  margin-bottom: 22px;
-}
-.settings-heading-center .section-heading {
-  justify-content: center;
-  text-align: center;
-}
-.settings-heading-center .section-heading > div {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.settings-heading-center .eyebrow {
-  justify-content: center;
-}
-.settings-heading-center p {
-  margin: 12px auto 0;
-}
+.settings-heading-right{margin-bottom:22px}
+.settings-heading-right .section-heading{justify-content:center;text-align:center}
+.settings-heading-right .section-heading>div{display:flex;flex-direction:column;align-items:center}
+.settings-heading-right .eyebrow{justify-content:center}
+.settings-heading-right p{margin:12px auto 0}
