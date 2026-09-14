@@ -44,11 +44,11 @@ def persist_telemetry(event: dict[str, Any], scenario: str) -> None:
         (
             event["timestamp"],
             scenario,
-            event["health_score"],
-            event["battery_percentage"],
-            event["signal_strength"],
-            int(event["gps_fix"]),
-            event["vibration"],
+            event.get("health_score") or 0,
+            event.get("battery_percentage") or 0.0,
+            event.get("signal_strength") or 0.0,
+            1 if event.get("gps_fix") else 0,
+            event.get("vibration") or 0.0,
         ),
     )
     db.commit()
