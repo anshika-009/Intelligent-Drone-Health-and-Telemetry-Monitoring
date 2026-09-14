@@ -8,13 +8,20 @@ export type RoutePoint = [number, number];
 
 export function StaticMapScene({ variant = 'live', progress = 62 }: { variant?: MapVariant; progress?: number }) {
   const className = variant === 'replay' ? 'replay-stage map-scene' : `map-visual map-scene${variant === 'detail' ? ' large' : ''}`;
+  const [zoom, setZoom] = React.useState(1);
+  const handleZoomIn = () => setZoom(z => Math.min(z + 0.3, 2.5));
+  const handleZoomOut = () => setZoom(z => Math.max(z - 0.3, 0.5));
+  const handleCenter = () => setZoom(1);
+
   return <div className={className}>
-    <div className="map-grid"/><div className="map-water"/><div className="map-park park-a"/><div className="map-park park-b"/>
-    <div className="map-road road-a"/><div className="map-road road-b"/><div className="map-road road-c"/><div className="map-road road-d"/>
-    {variant === 'detail' ? <><div className="route-detail"/><div className="route-point p1"/><div className="route-point p2"/></> : variant === 'replay' ? <div className="replay-route" style={{ '--progress': `${progress}%` } as React.CSSProperties}/> : <div className="map-route"/>}
-    <div className={`map-drone ${variant === 'replay' ? 'replay-drone' : ''}`} style={variant === 'replay' ? { left: `${progress}%` } : undefined}><span className="map-pulse"/><Gauge size={17}/></div>
-    <span className="map-label label-a">{variant === 'detail' ? 'TAKEOFF' : variant === 'replay' ? '14:44:38 / MOTOR 2' : 'NORTH SECTOR'}</span><span className="map-label label-b">{variant === 'detail' ? 'LANDING' : 'DRONE-01 / NOW'}</span><span className="map-label label-c">NORTH ROAD</span>
-    <div className="map-controls" aria-label="Map controls"><button type="button" aria-label="Zoom in">+</button><button type="button" aria-label="Zoom out">−</button><button type="button" aria-label="Center aircraft">⌖</button></div><div className="map-scale">100 m</div><div className="map-attribution">IDHTM basemap · live position</div>
+    <div style={{ transform: `scale(${zoom})`, width: '100%', height: '100%', transition: 'transform 0.3s ease', transformOrigin: 'center' }}>
+      <div className="map-grid"/><div className="map-water"/><div className="map-park park-a"/><div className="map-park park-b"/>
+      <div className="map-road road-a"/><div className="map-road road-b"/><div className="map-road road-c"/><div className="map-road road-d"/>
+      {variant === 'detail' ? <><div className="route-detail"/><div className="route-point p1"/><div className="route-point p2"/></> : variant === 'replay' ? <div className="replay-route" style={{ '--progress': `${progress}%` } as React.CSSProperties}/> : <div className="map-route"/>}
+      <div className={`map-drone ${variant === 'replay' ? 'replay-drone' : ''}`} style={variant === 'replay' ? { left: `${progress}%` } : undefined}><span className="map-pulse"/><Gauge size={17}/></div>
+      <span className="map-label label-a">{variant === 'detail' ? 'TAKEOFF' : variant === 'replay' ? '14:44:38 / MOTOR 2' : 'NORTH SECTOR'}</span><span className="map-label label-b">{variant === 'detail' ? 'LANDING' : 'DRONE-01 / NOW'}</span><span className="map-label label-c">NORTH ROAD</span>
+    </div>
+    <div className="map-controls" aria-label="Map controls"><button type="button" aria-label="Zoom in" onClick={handleZoomIn}>+</button><button type="button" aria-label="Zoom out" onClick={handleZoomOut}>−</button><button type="button" aria-label="Center aircraft" onClick={handleCenter}>⌖</button></div><div className="map-scale">100 m</div><div className="map-attribution">IDHTM basemap · live position</div>
   </div>;
 }
 
