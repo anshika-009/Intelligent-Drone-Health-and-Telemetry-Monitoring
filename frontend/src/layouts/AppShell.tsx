@@ -18,7 +18,7 @@ export function AppShell() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { telemetry, scenario, simulatorActive } = useApp();
+  const { telemetry, scenario, simulatorActive, isConnected } = useApp();
   const { user } = useUser();
 
   const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'Flight operator';
@@ -58,9 +58,9 @@ export function AppShell() {
         </nav>
         <div className="sidebar-foot">
           <div className="connection-mini">
-            <span className="live-dot"/>
+            <span className="live-dot" style={{ background: simulatorActive ? (isConnected ? '#05cc79' : '#ff5a5f') : '#64748b' }}/>
             <div>
-              <strong>{simulatorActive ? 'Simulator active' : 'Telemetry paused'}</strong>
+              <strong style={{ color: !isConnected && simulatorActive ? '#ff5a5f' : undefined }}>{simulatorActive ? (isConnected ? 'Simulator active' : 'Offline') : 'Telemetry paused'}</strong>
               <small>{scenario.replace('_', ' ')} / 1 Hz</small>
             </div>
           </div>
@@ -90,8 +90,8 @@ export function AppShell() {
           </div>
           <div className="top-actions">
             <div className="top-status">
-              <StatusPill label={simulatorActive ? 'Simulator active' : 'Offline'} tone={simulatorActive ? 'green' : 'gray'}/>
-              <span className="telemetry-pulse"><span className="live-dot"/> Telemetry 1 Hz</span>
+              <StatusPill label={simulatorActive ? (isConnected ? 'Simulator active' : 'Offline') : 'Paused'} tone={simulatorActive ? (isConnected ? 'green' : 'red') : 'gray'}/>
+              <span className="telemetry-pulse"><span className="live-dot" style={{ background: simulatorActive && !isConnected ? '#ff5a5f' : undefined }}/> Telemetry 1 Hz</span>
             </div>
             <button className="icon-button has-badge" onClick={() => navigate('/app/alerts')} aria-label="Notifications">
               <Bell size={18}/>

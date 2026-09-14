@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@clerk/react": "^6.15.2",
+    "@clerk/themes": "^2.4.57",
     "@vitejs/plugin-react": "latest",
     "framer-motion": "latest",
     "leaflet": "^1.9.4",

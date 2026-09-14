@@ -19,7 +19,7 @@ type DroneLocation = {
 
 const LOCATION_WS_URL = import.meta.env.VITE_LOCATION_WS_URL
   || (import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/telemetry').replace('/ws/telemetry', '/ws/drone-location');
-type Store = { telemetry: Telemetry; scenario: Scenario; setScenario: (s: Scenario) => void; simulatorActive: boolean; setSimulatorActive: (v: boolean) => void; alerts: Alert[]; acknowledgeAlert: (id: string) => void; theme: Theme;
+type Store = { telemetry: Telemetry; scenario: Scenario; setScenario: (s: Scenario) => void; simulatorActive: boolean; setSimulatorActive: (v: boolean) => void; isConnected: boolean; alerts: Alert[]; acknowledgeAlert: (id: string) => void; theme: Theme;
   toggleTheme: () => void; alertThresholds: AlertThresholds; setAlertThresholds: (t: AlertThresholds) => void; resetAlertThresholds: () => void; reducedMotion: boolean; toggleReducedMotion: () => void; };
 
 const Context = createContext<Store | null>(null);
@@ -101,13 +101,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   const setScenario = (next: Scenario) => { setScenarioState(next); void postScenario(next); };
 
+  const [isConnected, setIsConnected] = useState(false);
   useEffect(() => {
-    if (!simulatorActive) return;
+    if (!simulatorActive) { setIsConnected(false); return; }
     let fallbackTimer: number | undefined;
     let socket: WebSocket | undefined;
     let locationSocket: WebSocket | undefined;
     let cancelled = false;
-    const startFallback = () => { if (fallbackTimer) return; fallbackTimer = window.setInterval(() => setTelemetry(previous => nextLocalTelemetry(previous, scenario)), 1000); };
+    const startFallback = () => { if (fallbackTimer) return; setIsConnected(false); fallbackTimer = window.setInterval(() => setTelemetry(previous => nextLocalTelemetry(previous, scenario)), 1000); };
     const connect = async () => {
       // Clerk's session token gets attached as a query param since the browser
       // WebSocket API can't set custom headers during the handshake.
@@ -117,8 +118,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const locationAuthQuery = token ? `${LOCATION_WS_URL.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : '';
       try {
         socket = new WebSocket(`${WS_URL}${authQuery}`);
-        socket.onopen = () => { void postScenario(scenario); };
+        socket.onopen = () => { setIsConnected(true); void postScenario(scenario); };
         socket.onmessage = event => { const payload = JSON.parse(event.data) as { telemetry?: Telemetry; alerts?: Alert[] }; if (payload.telemetry) setTelemetry(payload.telemetry); if (payload.alerts) setAlerts(previous => [...payload.alerts!.map(incoming => { const existing = previous.find(p => p.id === incoming.id); return existing ? { ...incoming, acknowledged: existing.acknowledged } : incoming; }), ...previous.filter(a => a.id.startsWith('LIVE-'))]); };
+        socket.onclose = () => { startFallback(); };
         socket.onerror = () => { startFallback(); };
         try {
           locationSocket = new WebSocket(`${LOCATION_WS_URL}${locationAuthQuery}`);
@@ -166,7 +168,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return [...next, ...previous.filter(a => !a.id.startsWith('LIVE-'))].slice(0, 8);
     });
   }, [telemetry]);
-  const value = useMemo(() => ({ telemetry, scenario, setScenario, simulatorActive, setSimulatorActive, alerts, acknowledgeAlert: (id: string) => setAlerts(previous => previous.map(a => a.id === id ? { ...a, acknowledged: true } : a)), theme, toggleTheme, alertThresholds, setAlertThresholds, resetAlertThresholds, reducedMotion, toggleReducedMotion }), [telemetry, scenario, simulatorActive, alerts, theme, alertThresholds, reducedMotion]);
+  const value = useMemo(() => ({ telemetry, scenario, setScenario, simulatorActive, setSimulatorActive, isConnected, alerts, acknowledgeAlert: (id: string) => setAlerts(previous => previous.map(a => a.id === id ? { ...a, acknowledged: true } : a)), theme, toggleTheme, alertThresholds, setAlertThresholds, resetAlertThresholds, reducedMotion, toggleReducedMotion }), [telemetry, scenario, simulatorActive, isConnected, alerts, theme, alertThresholds, reducedMotion]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useApp() { const ctx = useContext(Context); if (!ctx) throw new Error('useApp must be used inside AppProvider'); return ctx; }
