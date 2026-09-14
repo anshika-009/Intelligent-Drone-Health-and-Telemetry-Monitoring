@@ -4,6 +4,8 @@ import { initialTelemetry, seedAlerts } from '../data/mock';
 import type { Alert, Scenario, Telemetry } from '../types';
 
 export type Theme = 'light' | 'dark';
+export type AlertThresholds = { battery: number; signal: number; vibration: number; temperature: number };
+const DEFAULT_THRESHOLDS: AlertThresholds = { battery: 30, signal: 45, vibration: 0.48, temperature: 58 };
 
 type DroneLocation = {
   drone_id?: string;
@@ -18,7 +20,7 @@ type DroneLocation = {
 const LOCATION_WS_URL = import.meta.env.VITE_LOCATION_WS_URL
   || (import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/telemetry').replace('/ws/telemetry', '/ws/drone-location');
 type Store = { telemetry: Telemetry; scenario: Scenario; setScenario: (s: Scenario) => void; simulatorActive: boolean; setSimulatorActive: (v: boolean) => void; alerts: Alert[]; acknowledgeAlert: (id: string) => void; theme: Theme;
-  toggleTheme: () => void; };
+  toggleTheme: () => void; alertThresholds: AlertThresholds; setAlertThresholds: (t: AlertThresholds) => void; resetAlertThresholds: () => void; reducedMotion: boolean; toggleReducedMotion: () => void; };
 
 const Context = createContext<Store | null>(null);
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
@@ -73,6 +75,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+
+  const [alertThresholds, setAlertThresholds] = useState<AlertThresholds>(() => {
+    const saved = localStorage.getItem('idhtm-thresholds');
+    if (saved) { try { return { ...DEFAULT_THRESHOLDS, ...JSON.parse(saved) }; } catch { /* fall through to default */ } }
+    return DEFAULT_THRESHOLDS;
+  });
+  useEffect(() => { localStorage.setItem('idhtm-thresholds', JSON.stringify(alertThresholds)); }, [alertThresholds]);
+  const resetAlertThresholds = () => setAlertThresholds(DEFAULT_THRESHOLDS);
+
+  const [reducedMotion, setReducedMotion] = useState(() => {
+    const saved = localStorage.getItem('idhtm-reduced-motion');
+    if (saved === 'true' || saved === 'false') return saved === 'true';
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
+  useEffect(() => {
+    localStorage.setItem('idhtm-reduced-motion', String(reducedMotion));
+    document.documentElement.classList.toggle('reduced-motion', reducedMotion);
+  }, [reducedMotion]);
+  const toggleReducedMotion = () => setReducedMotion(prev => !prev);
 
   const postScenario = async (next: Scenario) => {
     const token = await getToken();
@@ -145,7 +166,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return [...next, ...previous.filter(a => !a.id.startsWith('LIVE-'))].slice(0, 8);
     });
   }, [telemetry]);
-  const value = useMemo(() => ({ telemetry, scenario, setScenario, simulatorActive, setSimulatorActive, alerts, acknowledgeAlert: (id: string) => setAlerts(previous => previous.map(a => a.id === id ? { ...a, acknowledged: true } : a)),theme,toggleTheme }), [telemetry, scenario, simulatorActive, alerts,theme]);
+  const value = useMemo(() => ({ telemetry, scenario, setScenario, simulatorActive, setSimulatorActive, alerts, acknowledgeAlert: (id: string) => setAlerts(previous => previous.map(a => a.id === id ? { ...a, acknowledged: true } : a)), theme, toggleTheme, alertThresholds, setAlertThresholds, resetAlertThresholds, reducedMotion, toggleReducedMotion }), [telemetry, scenario, simulatorActive, alerts, theme, alertThresholds, reducedMotion]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useApp() { const ctx = useContext(Context); if (!ctx) throw new Error('useApp must be used inside AppProvider'); return ctx; }

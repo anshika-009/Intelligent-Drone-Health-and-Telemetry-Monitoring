@@ -1,4 +1,5 @@
 import { useState, type ChangeEvent } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { SectionHeading } from '../../components/common';
 import { useApp, type AlertThresholds } from '../../store/AppStore';
 import { useUser } from '@clerk/react';
@@ -56,36 +57,41 @@ export function SettingsPage() {
               <strong>Alert thresholds</strong>
               <p>Battery, sensor and motor limits that trigger live alerts</p>
             </div>
-            <span>{`Battery <${alertThresholds.battery}% · Signal <${alertThresholds.signal}% · Vibration >${alertThresholds.vibration.toFixed(2)}g · Temp >${alertThresholds.temperature}°C`}</span>
-            <span className="setting-status">{thresholdsOpen ? 'Close' : 'Configure'}</span>
+            <ChevronDown
+              size={16}
+              className="threshold-chevron"
+              style={{ transform: thresholdsOpen ? 'rotate(180deg)' : 'none', transition: '.18s ease' }}
+            />
           </button>
           {thresholdsOpen && (
             <div className="threshold-panel">
-              <div className="threshold-field">
-                <label>Battery reserve<span>{draft.battery}%</span></label>
-                <input type="range" min={5} max={60} step={1} value={draft.battery} onChange={updateDraft('battery')} />
-                <input type="number" min={5} max={60} value={draft.battery} onChange={updateDraft('battery')} aria-label="Battery threshold percent" />
-              </div>
-              <div className="threshold-field">
-                <label>Signal / sensor strength<span>{draft.signal}%</span></label>
-                <input type="range" min={10} max={80} step={1} value={draft.signal} onChange={updateDraft('signal')} />
-                <input type="number" min={10} max={80} value={draft.signal} onChange={updateDraft('signal')} aria-label="Signal threshold percent" />
-              </div>
-              <div className="threshold-field">
-                <label>Motor vibration<span>{draft.vibration.toFixed(2)}g</span></label>
-                <input type="range" min={0.2} max={0.9} step={0.01} value={draft.vibration} onChange={updateDraft('vibration')} />
-                <input type="number" min={0.2} max={0.9} step={0.01} value={draft.vibration} onChange={updateDraft('vibration')} aria-label="Motor vibration threshold in g" />
-              </div>
-              <div className="threshold-field">
-                <label>Motor temperature<span>{draft.temperature}°C</span></label>
-                <input type="range" min={40} max={90} step={1} value={draft.temperature} onChange={updateDraft('temperature')} />
-                <input type="number" min={40} max={90} value={draft.temperature} onChange={updateDraft('temperature')} aria-label="Motor temperature threshold in celsius" />
+              <div className="threshold-grid">
+                <div className="threshold-field">
+                  <label>Battery reserve<span>{draft.battery}%</span></label>
+                  <input type="range" min={5} max={60} step={1} value={draft.battery} onChange={updateDraft('battery')} />
+                  <input type="number" min={5} max={60} value={draft.battery} onChange={updateDraft('battery')} aria-label="Battery threshold percent" />
+                </div>
+                <div className="threshold-field">
+                  <label>Signal / sensor strength<span>{draft.signal}%</span></label>
+                  <input type="range" min={10} max={80} step={1} value={draft.signal} onChange={updateDraft('signal')} />
+                  <input type="number" min={10} max={80} value={draft.signal} onChange={updateDraft('signal')} aria-label="Signal threshold percent" />
+                </div>
+                <div className="threshold-field">
+                  <label>Motor vibration<span>{draft.vibration.toFixed(2)}g</span></label>
+                  <input type="range" min={0.2} max={0.9} step={0.01} value={draft.vibration} onChange={updateDraft('vibration')} />
+                  <input type="number" min={0.2} max={0.9} step={0.01} value={draft.vibration} onChange={updateDraft('vibration')} aria-label="Motor vibration threshold in g" />
+                </div>
+                <div className="threshold-field">
+                  <label>Motor temperature<span>{draft.temperature}°C</span></label>
+                  <input type="range" min={40} max={90} step={1} value={draft.temperature} onChange={updateDraft('temperature')} />
+                  <input type="number" min={40} max={90} value={draft.temperature} onChange={updateDraft('temperature')} aria-label="Motor temperature threshold in celsius" />
+                </div>
               </div>
               <div className="threshold-actions">
+                {saved && <span className="threshold-saved-note">Saved — live alerts now use these limits.</span>}
                 <button type="button" className="button ghost small" onClick={resetThresholds}>Reset to defaults</button>
                 <button type="button" className="button small" onClick={saveThresholds}>Save thresholds</button>
               </div>
-              {saved && <span className="threshold-saved-note">Saved — live alerts now use these limits.</span>}
             </div>
           )}
         </div>
