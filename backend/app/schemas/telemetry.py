@@ -1,28 +1,29 @@
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel, Field
 
 class TelemetryEvent(BaseModel):
     timestamp: datetime
     drone_id: str = 'DRONE-01'
     flight_id: str = 'FLT-LIVE-01'
-    latitude: float
-    longitude: float
-    altitude: float
-    ground_speed: float
-    airspeed: float
-    vertical_speed: float
-    heading: float
-    flight_mode: str
-    battery_percentage: float = Field(ge=0, le=100)
-    battery_voltage: float
-    estimated_remaining_flight_time: int
-    signal_strength: float = Field(ge=0, le=100)
-    gps_fix: bool
-    gps_satellites: int
-    vibration: float
-    temperature: float
-    motor_outputs: list[float]
-    health_score: int = Field(ge=0, le=100)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    altitude: Optional[float] = None
+    ground_speed: Optional[float] = None
+    airspeed: Optional[float] = None
+    vertical_speed: Optional[float] = None
+    heading: Optional[float] = None
+    flight_mode: Optional[str] = None
+    battery_percentage: Optional[float] = Field(default=None, ge=0, le=100)
+    battery_voltage: Optional[float] = None
+    estimated_remaining_flight_time: Optional[int] = None
+    signal_strength: Optional[float] = Field(default=None, ge=0, le=100)
+    gps_fix: Optional[bool] = None
+    gps_satellites: Optional[int] = None
+    vibration: Optional[float] = None
+    temperature: Optional[float] = None
+    motor_outputs: Optional[list[float]] = None
+    health_score: Optional[int] = Field(default=None, ge=0, le=100)
 
 class ScenarioRequest(BaseModel):
     scenario: str
