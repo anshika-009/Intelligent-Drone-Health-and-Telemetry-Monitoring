@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from 'react';
-import { Activity, Bell, ChevronDown, CircleGauge, Cpu, FileText, Gauge, History, LayoutDashboard, Menu, Radio, Settings, ShieldCheck, Wrench, X } from 'lucide-react';
+import { Activity, Bell, ChevronDown, CircleGauge, Cpu, FileText, Gauge, History, LayoutDashboard, Menu, Radio, Settings, ShieldCheck, Wrench, X, LogOut } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Brand, StatusPill } from '../components/common';
 import { useApp } from '../store/AppStore';
@@ -8,7 +8,7 @@ import { useUser, UserButton } from '@clerk/react';
 type NavIcon = ComponentType<{ size?: number }>;
 type NavItem = { label: string; to: string; Icon: NavIcon };
 const groups: { label: string; items: NavItem[] }[] = [
-  { label: 'Monitoring', items: [{ label: 'Live monitor', to: '/app/dashboard', Icon: Activity }, { label: 'Cockpit', to: '/app/cockpit', Icon: Gauge }, { label: 'Health', to: '/app/health', Icon: ShieldCheck }, { label: 'Alerts', to: '/app/alerts', Icon: Bell }] },
+  { label: 'Monitoring', items: [{ label: 'Dashboard', to: '/app/dashboard', Icon: LayoutDashboard }, { label: 'Cockpit', to: '/app/cockpit', Icon: Gauge }, { label: 'Health', to: '/app/health', Icon: ShieldCheck }, { label: 'Alerts', to: '/app/alerts', Icon: Bell }] },
   { label: 'Flight operations', items: [{ label: 'Flights', to: '/app/flights', Icon: History }, { label: 'Flight replay', to: '/app/flights/FLT-2026-0821-07/replay', Icon: Radio }] },
   { label: 'Operations', items: [{ label: 'Maintenance', to: '/app/maintenance', Icon: Wrench }, { label: 'Reports', to: '/app/reports', Icon: FileText }] },
   { label: 'System', items: [{ label: 'Connections', to: '/app/connections', Icon: Cpu }, { label: 'Settings', to: '/app/settings', Icon: Settings }] }
@@ -22,7 +22,7 @@ export function AppShell() {
   const { user } = useUser();
 
   const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'Flight operator';
-  const title = location.pathname.includes('cockpit') ? 'Cockpit' : location.pathname.includes('health') ? 'Health' : location.pathname.includes('alerts') ? 'Alerts' : location.pathname.includes('flights') ? 'Flights' : location.pathname.includes('maintenance') ? 'Maintenance' : location.pathname.includes('reports') ? 'Reports' : location.pathname.includes('connections') ? 'Connections' : location.pathname.includes('settings') ? 'Settings' : 'Live monitor';
+  const title = location.pathname.includes('cockpit') ? 'Cockpit' : location.pathname.includes('health') ? 'Health' : location.pathname.includes('alerts') ? 'Alerts' : location.pathname.includes('flights') ? 'Flights' : location.pathname.includes('maintenance') ? 'Maintenance' : location.pathname.includes('reports') ? 'Reports' : location.pathname.includes('connections') ? 'Connections' : location.pathname.includes('settings') ? 'Settings' : 'Dashboard';
 
   return (
     <div className="app-shell">
@@ -64,7 +64,16 @@ export function AppShell() {
               <small>{scenario.replace('_', ' ')} / 1 Hz</small>
             </div>
           </div>
-          <div className="side-link logout" style={{ cursor: 'default' }}>
+          <div 
+            className="side-link logout" 
+            style={{ cursor: 'pointer' }}
+            onClick={(e) => {
+              const btn = e.currentTarget.querySelector('button');
+              if (btn && !btn.contains(e.target as Node)) {
+                btn.click();
+              }
+            }}
+          >
             <UserButton/>
             <span>Account</span>
           </div>
