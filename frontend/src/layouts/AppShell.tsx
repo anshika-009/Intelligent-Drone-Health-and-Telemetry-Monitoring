@@ -97,8 +97,15 @@ export function AppShell() {
               <Bell size={18}/>
               <b>{telemetry.health_score < 80 ? 3 : 1}</b>
             </button>
-            <div className="user-menu">
-              <span className="user-avatar">{displayName.slice(0, 2).toUpperCase()}</span>
+            <div 
+              className="user-menu"
+              style={{ cursor: 'pointer' }}
+              onClick={(e) => {
+                const btn = e.currentTarget.querySelector('button');
+                if (btn && !btn.contains(e.target as Node)) btn.click();
+              }}
+            >
+              <UserButton />
               <span className="user-name">{displayName}</span>
             </div>
           </div>
