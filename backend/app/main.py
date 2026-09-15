@@ -213,7 +213,6 @@ async def telemetry_polling_loop():
         # and category freshness.
         await asyncio.sleep(0.02)
 
-
 # Startup
 
 @app.on_event("startup")
@@ -265,7 +264,6 @@ def startup() -> None:
     asyncio.create_task(
         telemetry_polling_loop()
     )
-
 
 # Healthcheck
 
