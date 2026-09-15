@@ -51,6 +51,24 @@ class PipelineRunner:
         if message is None:
             return False
 
+        return self._process_message(message)
+
+    def poll_available(self, max_messages: int = 256) -> bool:
+        """Process all currently queued messages up to a bounded limit."""
+        if not self.is_active:
+            raise PipelineNotActiveError("Cannot poll: Pipeline runner is not active.")
+
+        processed = False
+        for _ in range(max_messages):
+            message = self.source.receive()
+            if message is None:
+                break
+            processed = self._process_message(message) or processed
+        return processed
+
+    def _process_message(self, message) -> bool:
+        """Parse, normalize, and aggregate one raw MAVLink message."""
+
         parsed = self.parser.parse(message)
         if parsed is None:
             return False

@@ -268,7 +268,7 @@ export function DashboardPage() {
             <Metric
               label="Ground speed"
               value={telemetry.ground_speed.toFixed(0)}
-              unit="km/h"
+              unit="m/s"
             />
             <Metric
               label="Vertical speed"
