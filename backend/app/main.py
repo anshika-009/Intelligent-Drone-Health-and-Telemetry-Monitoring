@@ -40,14 +40,22 @@ latest_telemetry_state = None
 
 async def telemetry_polling_loop():
     global latest_telemetry_state
+    poll_count = 0
+    success_count = 0
     while True:
-        if pipeline_runner and pipeline_runner.poll_once():
-            state = pipeline_runner.get_state()
-            legacy_dict = adapt_to_backend(state)
-            legacy_dict['health_score'] = calculate_health(legacy_dict)
-            latest_telemetry_state = legacy_dict
+        if pipeline_runner:
+            poll_count += 1
+            got_message = pipeline_runner.poll_once()
+            if got_message:
+                success_count += 1
+                state = pipeline_runner.get_state()
+                legacy_dict = adapt_to_backend(state)
+                legacy_dict['health_score'] = calculate_health(legacy_dict)
+                latest_telemetry_state = legacy_dict
+            if poll_count % 200 == 0:  # TEMP
+                print(f"[pipeline DEBUG] polls={poll_count} successful={success_count} is_active={pipeline_runner.is_active}")
         await asyncio.sleep(0.02)
-
+        
 simulator = Simulator()
 
 maintenance = [
@@ -95,10 +103,13 @@ def startup() -> None:
 
     global pipeline_runner
     if PIPELINE_AVAILABLE:
-        pipeline_runner = PipelineRunner(connection_string=os.environ.get('MAVLINK_URL', 'udp:127.0.0.1:14550'))
-        pipeline_runner.start()
-        asyncio.create_task(telemetry_polling_loop())
-
+        try:
+            pipeline_runner = PipelineRunner(connection_string=os.environ.get('MAVLINK_URL', 'udp:127.0.0.1:14550'))
+            pipeline_runner.start()
+            asyncio.create_task(telemetry_polling_loop())
+        except Exception as error:
+            print(f"[startup] MAVLink pipeline unavailable, falling back to simulator: {error}")
+            pipeline_runner = None
 
 @app.get('/api/healthcheck')
 def healthcheck():
