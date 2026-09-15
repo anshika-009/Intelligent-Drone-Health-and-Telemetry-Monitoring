@@ -21,6 +21,7 @@ from app.schemas.telemetry import ScenarioRequest
 from app.services.health.engine import explainable_rules, component_health
 from app.services.telemetry.simulator import Simulator, SCENARIOS
 from app.services.rule_engine import IDHTMRuleEngine
+from app.services.telemetry.pipeline_bridge import get_latest_telemetry
 
 app = FastAPI(title='IDHTM Telemetry API', version='1.0.0')
 physics_engine = IDHTMRuleEngine()
@@ -136,6 +137,11 @@ def latest(user_id: str = Depends(get_current_user)):
     event = latest_telemetry_state.copy() if latest_telemetry_state else simulator.next()
     persist_telemetry(event, simulator.scenario)
     return event
+@app.get('/api/telemetry/pipeline/latest')
+def pipeline_latest(user_id: str = Depends(get_current_user)):
+    event = get_latest_telemetry()
+    return event
+
 
 @app.get('/api/health')
 def health(user_id: str = Depends(get_current_user)):

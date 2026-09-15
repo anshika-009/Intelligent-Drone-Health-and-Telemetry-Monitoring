@@ -30,11 +30,15 @@ def adapt_to_backend(state: VehicleState) -> Dict[str, Any]:
         # Voltage Compatibility Alias for AI Engine
         "voltage": state.battery_voltage,
         
-        "temperature": state.temperature,
-        "signal_strength": state.signal_strength,
-        
-        "gps_fix": bool(state.gps_fix) if state.gps_fix is not None else None,
-        "gps_satellites": int(state.gps_satellites) if state.gps_satellites is not None else None,
+	"temperature": state.temperature,
+	"signal_strength": state.signal_strength,
+
+	"ax": state.ax,
+	"ay": state.ay,
+        "az": state.az,
+
+	"gps_fix": bool(state.gps_fix) if state.gps_fix is not None else None,
+	"gps_satellites": int(state.gps_satellites) if state.gps_satellites is not None else None,
         
         # COMPATIBILITY_PLACEHOLDER - NOT MEASURED DATA
         "flight_mode": "UNKNOWN",
