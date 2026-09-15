@@ -1,11 +1,11 @@
 import { useState, type ChangeEvent } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Sun, Moon } from 'lucide-react';
 import { SectionHeading } from '../../components/common';
 import { useApp, type AlertThresholds } from '../../store/AppStore';
 import { useUser } from '@clerk/react';
 
 export function SettingsPage() {
-  const { alertThresholds, setAlertThresholds, resetAlertThresholds, reducedMotion, toggleReducedMotion } = useApp();
+  const { theme, toggleTheme, alertThresholds, setAlertThresholds, resetAlertThresholds, reducedMotion, toggleReducedMotion } = useApp();
   const { user } = useUser();
   const [thresholdsOpen, setThresholdsOpen] = useState(false);
   const [draft, setDraft] = useState<AlertThresholds>(alertThresholds);
@@ -51,6 +51,33 @@ export function SettingsPage() {
           <span className="setting-status">Signed in</span>
         </div>
 
+                <div className="setting-row">
+          <div>
+            <strong>Appearance</strong>
+            <p>Choose how the workspace looks on this device</p>
+          </div>
+          <div className="theme-switch" role="radiogroup" aria-label="Theme">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={theme === 'light'}
+              className={theme === 'light' ? 'selected' : ''}
+              onClick={() => theme !== 'light' && toggleTheme()}
+            >
+              <Sun size={14} /> Light
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={theme === 'dark'}
+              className={theme === 'dark' ? 'selected' : ''}
+              onClick={() => theme !== 'dark' && toggleTheme()}
+            >
+              <Moon size={14} /> Dark
+            </button>
+          </div>
+        </div>
+        
         <div className="setting-row expandable">
           <button type="button" className="setting-row-main" onClick={openThresholds} aria-expanded={thresholdsOpen}>
             <div>

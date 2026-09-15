@@ -3031,7 +3031,7 @@ input:focus-visible {
   justify-self: end;
 }
 .setting-row > span:last-child {
-  padding: 7px 10px;
+  padding: 12px 14px;
   border: 1px solid #c8e2d2;
   background: #f4fbf7;
   color: #327653;
@@ -4919,3 +4919,13 @@ html.dark .toggle-switch {
   .user-name {
     display: none;
   }
+
+/* --- Settings page: theme (light/dark) segmented control --- */
+.theme-switch{display:inline-flex;gap:4px;padding:4px;border:1px solid var(--line);border-radius:4px;background:#f4f5f5}
+.setting-row .theme-switch{grid-column:3;justify-self:end}
+.theme-switch button{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border:0;border-radius:3px;background:transparent;color:#6d7982;font-size:11px;font-weight:600;transition:.15s ease}
+.theme-switch button:hover{color:var(--ink)}
+.theme-switch button.selected{background:#fff;color:var(--blue);box-shadow:0 1px 3px rgba(29,43,56,.12)}
+html.dark .theme-switch{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14)}
+html.dark .theme-switch button{color:#9fb0b5}
+html.dark .theme-switch button.selected{background:rgba(255,255,255,.12);color:#8fd0e8}
