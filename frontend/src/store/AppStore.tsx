@@ -19,8 +19,7 @@ type DroneLocation = {
 
 const LOCATION_WS_URL = import.meta.env.VITE_LOCATION_WS_URL
   || (import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/telemetry').replace('/ws/telemetry', '/ws/drone-location');
-type Store = { telemetry: Telemetry; scenario: Scenario; setScenario: (s: Scenario) => void; simulatorActive: boolean; setSimulatorActive: (v: boolean) => void; alerts: Alert[]; acknowledgeAlert: (id: string) => void; theme: Theme;
-  toggleTheme: () => void; alertThresholds: AlertThresholds; setAlertThresholds: (t: AlertThresholds) => void; resetAlertThresholds: () => void; reducedMotion: boolean; toggleReducedMotion: () => void; };
+type Store = {tasks: MaintenanceTask[];addTask: (task: Omit<MaintenanceTask, 'id' | 'created' | 'status'>) => void;updateTaskStatus: (id: string, status: MaintenanceTask['status']) => void; telemetry: Telemetry; scenario: Scenario; setScenario: (s: Scenario) => void; simulatorActive: boolean; setSimulatorActive: (v: boolean) => void; alerts: Alert[]; acknowledgeAlert: (id: string) => void; theme: Theme;toggleTheme: () => void; alertThresholds: AlertThresholds; setAlertThresholds: (t: AlertThresholds) => void; resetAlertThresholds: () => void; reducedMotion: boolean; toggleReducedMotion: () => void; };
 
 const Context = createContext<Store | null>(null);
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
@@ -75,7 +74,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
-
+  // 2. DECLARE MAINTENANCE STATE AND FUNCTIONS FIRST
+  const [tasks, setTasks] = useState<MaintenanceTask[]>([
+    {
+      id: 'TASK-001',
+      component: 'Motor 2',
+      issue: 'Potential bearing wear',
+      recommendation: 'Inspect motor bearing before next extended flight.',
+      severity: 'Medium',
+      status: 'Pending',
+      created: '21 Aug 2026'
+    }
+  ]);
+  const addTask = (newTask: Omit<MaintenanceTask, 'id' | 'created' | 'status'>) => {
+    setTasks(prev => [
+      {
+        ...newTask,
+        id: `TASK-${Date.now()}`,
+        status: 'Pending',
+        created: 'Today'
+      },
+      ...prev
+    ]);
+  };
+  const updateTaskStatus = (id: string, status: MaintenanceTask['status']) => {
+    setTasks(prev => prev.map(t => (t.id === id ? { ...t, status } : t)));
+  };
   const [alertThresholds, setAlertThresholds] = useState<AlertThresholds>(() => {
     const saved = localStorage.getItem('idhtm-thresholds');
     if (saved) { try { return { ...DEFAULT_THRESHOLDS, ...JSON.parse(saved) }; } catch { /* fall through to default */ } }
@@ -166,7 +190,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return [...next, ...previous.filter(a => !a.id.startsWith('LIVE-'))].slice(0, 8);
     });
   }, [telemetry]);
-  const value = useMemo(() => ({ telemetry, scenario, setScenario, simulatorActive, setSimulatorActive, alerts, acknowledgeAlert: (id: string) => setAlerts(previous => previous.map(a => a.id === id ? { ...a, acknowledged: true } : a)), theme, toggleTheme, alertThresholds, setAlertThresholds, resetAlertThresholds, reducedMotion, toggleReducedMotion }), [telemetry, scenario, simulatorActive, alerts, theme, alertThresholds, reducedMotion]);
+  const value = useMemo(() => ({ telemetry, scenario, setScenario, simulatorActive, setSimulatorActive, alerts, acknowledgeAlert: (id: string) => setAlerts(previous => previous.map(a => a.id === id ? { ...a, acknowledged: true } : a)), theme, toggleTheme, alertThresholds, setAlertThresholds, resetAlertThresholds, reducedMotion, toggleReducedMotion,tasks,addTask,updateTaskStatus }), [telemetry, scenario, simulatorActive, alerts, theme, alertThresholds, reducedMotion,tasks,addTask,updateTaskStatus]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
+
+
+// Include tasks, addTask, and updateTaskStatus in useMemo value.
 }
 export function useApp() { const ctx = useContext(Context); if (!ctx) throw new Error('useApp must be used inside AppProvider'); return ctx; }
+
+//adding tasks to maintenance page
+export type MaintenanceTask = {
+  id: string;
+  component: string;
+  issue: string;
+  recommendation: string;
+  severity: 'Low' | 'Medium' | 'High' | 'Critical';
+  status: 'Pending' | 'In Progress' | 'Completed';
+  created: string;
+};

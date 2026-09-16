@@ -15,6 +15,20 @@ import { useApp } from "../../store/AppStore";
 export function HealthPage() {
   const { telemetry } = useApp();
   const [selected, setSelected] = useState(components[1]);
+  //for maintenance
+  const currentHealth =
+    selected.key === "motors"
+      ? Math.max(45, Math.round(telemetry.health_score - 12))
+      : selected.health;
+
+  const severityLevel: 'Low' | 'Medium' | 'High' | 'Critical' =
+    currentHealth > 90
+      ? 'Low'
+      : currentHealth > 75
+        ? 'Medium'
+        : currentHealth > 50
+          ? 'High'
+          : 'Critical';
   return (
     <div className="page">
       <SectionHeading
@@ -77,19 +91,16 @@ export function HealthPage() {
           </div>
           <div className="component-detail-copy">
             <div className="detail-score">
-              <strong>
+              <strong>{currentHealth}</strong>
+              <span>health score</span>
+              {/* <strong>
                 {selected.key === "motors"
                   ? Math.max(45, Math.round(telemetry.health_score - 12))
                   : selected.health}
-              </strong>
-              <span>health score</span>
+              </strong> */}
             </div>
             <ScoreBar
-              score={
-                selected.key === "motors"
-                  ? Math.max(45, Math.round(telemetry.health_score - 12))
-                  : selected.health
-              }
+              score={currentHealth}
               tone={
                 selected.health > 90
                   ? "green"
@@ -122,7 +133,18 @@ export function HealthPage() {
                 labels
               />
             </div>
-            <Link className="button secondary" to="/app/maintenance">
+            <Link
+              className="button secondary"
+              to="/app/maintenance"
+              state={{
+                prefill: {
+                  component: selected.name,
+                  issue: `${selected.state} (Health score: ${currentHealth}/100)`,
+                  recommendation: selected.recommendation,
+                  severity: severityLevel,
+                },
+              }}
+            >
               Create maintenance task <Wrench size={15} />
             </Link>
           </div>
