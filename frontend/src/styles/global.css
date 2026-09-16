@@ -4927,3 +4927,5 @@ html.dark .toggle-switch {
 html.dark .theme-switch{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14)}
 html.dark .theme-switch button{color:#9fb0b5}
 html.dark .theme-switch button.selected{background:rgba(255,255,255,.12);color:#8fd0e8}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.spin-anim { animation: spin 1s linear infinite; }
