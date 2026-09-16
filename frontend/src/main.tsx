@@ -57,25 +57,15 @@ if (!CLERK_PUBLISHABLE_KEY) {
 
 function Protected() {
   const { isLoaded, isSignedIn } = useAuth();
+  
   if (!isLoaded) {
     return (
-      <div className="simple-public">
-        <main>
-          <div className="simple-public-copy">
-            <span className="eyebrow">IDHTM / AUTHENTICATION</span>
-            <h1>Sign-in service unavailable.</h1>
-            <p>
-              The dashboard is waiting for Clerk to load. Check your network or
-              proxy access to the Clerk domain, then reload the page.
-            </p>
-            <a href="/" className="inline-link">
-              Back to the product story
-            </a>
-          </div>
-        </main>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div className="spin-anim" style={{ width: '24px', height: '24px', border: '2px solid #cbd8e3', borderTopColor: '#2364a1', borderRadius: '50%' }}></div>
       </div>
     );
   }
+
   return isSignedIn ? <AppShell /> : <Navigate to="/" replace />;
 }
 function PublicPlaceholder({ title, copy }: { title: string; copy: string }) {
