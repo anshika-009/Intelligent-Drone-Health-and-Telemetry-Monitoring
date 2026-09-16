@@ -3,9 +3,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+
 import { useAuth } from "@clerk/react";
 import { initialTelemetry } from "../data/mock";
 import { telemetryService } from "../services/api";
@@ -187,6 +189,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void postScenario(next);
   };
 
+    const getTokenRef = useRef(getToken);
+  useEffect(() => { getTokenRef.current = getToken; }, [getToken]);
+
   const [isConnected, setIsConnected] = useState(false);
   useEffect(() => {
     if (!simulatorActive) {
@@ -207,7 +212,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     const pollLatest = async () => {
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         const latest = (await telemetryService.latest(
           token,
         )) as Partial<Telemetry>;
@@ -232,8 +237,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (fallbackTimer) window.clearInterval(fallbackTimer);
       if (pollTimer) window.clearInterval(pollTimer);
     };
-  }, [scenario, simulatorActive, getToken]);
-
+  }, [scenario, simulatorActive]);
+  
   const value = useMemo(
     () => ({
       telemetry,

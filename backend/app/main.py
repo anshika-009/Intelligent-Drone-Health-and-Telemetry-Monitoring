@@ -27,6 +27,7 @@ IMPORTANT:
 import asyncio
 import os
 import sys
+import time
 from datetime import datetime, timezone
 
 from fastapi import (
@@ -139,6 +140,11 @@ flights: list[dict] = []
 
 maintenance: list[dict] = []
 
+# Connection string is stored globally so the watchdog can rebuild a
+# fresh PipelineRunner (and therefore a fresh socket) without needing
+# to re-read the environment each time.
+_connection_string: str | None = None
+
 
 # Telemetry polling loop
 
@@ -153,10 +159,54 @@ async def telemetry_polling_loop():
         REST API     ─┐
         WebSocket    ─┼──> same latest telemetry state
         Dashboard    ─┘
+
+    IMPORTANT - staleness watchdog:
+
+        pymavlink's TCP transport can silently retry a dead connection
+        internally (it prints "EOF on TCP socket" and keeps trying to
+        reconnect *inside* recv_match) without ever raising a Python
+        exception. That means `pipeline_runner.is_active` can stay
+        True forever even though no new messages are actually
+        arriving, and the dashboard would silently keep showing the
+        last snapshot from before the disconnect.
+
+        To defend against that, we track the wall-clock time of the
+        last successfully processed message. If too much time passes
+        without one, we force a full reconnect (stop + start, which
+        throws away the old, possibly wedged socket and opens a brand
+        new one) - regardless of whether an exception was ever raised.
     """
 
     global latest_telemetry_state
     global latest_health_analysis
+    global pipeline_runner
+
+    STALE_TIMEOUT_SECONDS = 5.0
+    RECONNECT_COOLDOWN_SECONDS = 3.0
+
+    last_message_time = time.monotonic()
+    next_reconnect_attempt = 0.0
+
+    def force_reconnect(reason: str) -> None:
+        nonlocal last_message_time, next_reconnect_attempt
+        print(f"[pipeline] forcing reconnect ({reason})", flush=True)
+        try:
+            if pipeline_runner:
+                pipeline_runner.stop()
+        except Exception as stop_error:
+            print(f"[pipeline] error while stopping old connection: {stop_error}", flush=True)
+        try:
+            pipeline_runner.start()
+            set_pipeline_runner(pipeline_runner)
+            print("[pipeline] reconnected to MAVLink source", flush=True)
+            last_message_time = time.monotonic()
+        except Exception as start_error:
+            print(
+                f"[pipeline] reconnect failed, retrying in "
+                f"{RECONNECT_COOLDOWN_SECONDS}s: {start_error}",
+                flush=True,
+            )
+        next_reconnect_attempt = time.monotonic() + RECONNECT_COOLDOWN_SECONDS
 
     while True:
 
@@ -164,39 +214,55 @@ async def telemetry_polling_loop():
 
             if pipeline_runner:
 
-                # Drain queued MAVLink messages so the backend does not
-                # publish an increasingly old packet from the receive queue.
-                processed = pipeline_runner.poll_available()
+                now = time.monotonic()
 
-                if processed:
+                transport_down = not pipeline_runner.is_active
+                stale = (now - last_message_time) > STALE_TIMEOUT_SECONDS
 
-                    # Get aggregated canonical state.
-                    state = pipeline_runner.get_state()
-
-                    # Convert canonical state to backend format.
-                    telemetry = adapt_to_backend(state)
-
-                    # Run your health intelligence.
-                    health = analyze_health(
-                        telemetry
+                if (transport_down or stale) and now >= next_reconnect_attempt:
+                    force_reconnect(
+                        "transport reported inactive"
+                        if transport_down
+                        else f"no data for over {STALE_TIMEOUT_SECONDS}s"
                     )
 
-                    # Add derived health score.
-                    telemetry["health_score"] = (
-                        health["score"]
-                    )
+                if pipeline_runner.is_active:
 
-                    # Store the SAME snapshot used by
-                    # REST and WebSocket.
-                    latest_telemetry_state = telemetry
+                    # Drain queued MAVLink messages so the backend does not
+                    # publish an increasingly old packet from the receive queue.
+                    processed = pipeline_runner.poll_available()
 
-                    latest_health_analysis = health
+                    if processed:
 
-                    # Persist one snapshot.
-                    persist_telemetry(
-                        telemetry,
-                        "live_mavlink",
-                    )
+                        last_message_time = time.monotonic()
+
+                        # Get aggregated canonical state.
+                        state = pipeline_runner.get_state()
+
+                        # Convert canonical state to backend format.
+                        telemetry = adapt_to_backend(state)
+
+                        # Run your health intelligence.
+                        health = analyze_health(
+                            telemetry
+                        )
+
+                        # Add derived health score.
+                        telemetry["health_score"] = (
+                            health["score"]
+                        )
+
+                        # Store the SAME snapshot used by
+                        # REST and WebSocket.
+                        latest_telemetry_state = telemetry
+
+                        latest_health_analysis = health
+
+                        # Persist one snapshot.
+                        persist_telemetry(
+                            telemetry,
+                            "live_mavlink",
+                        )
 
         except Exception as error:
 
@@ -214,11 +280,11 @@ async def telemetry_polling_loop():
         await asyncio.sleep(0.02)
 
 # Startup
-
 @app.on_event("startup")
 def startup() -> None:
 
     global pipeline_runner
+    global _connection_string
 
     initialize()
 
@@ -230,41 +296,41 @@ def startup() -> None:
         )
 
         return
-
-    # Read the MAVLink connection from environment.
-    #
-    # Example:
-    #
-    # MAVLINK_URL=udp:127.0.0.1:14551
-    #
+    
     connection_string = os.environ.get(
         "MAVLINK_URL",
         "udp:127.0.0.1:14550",
     )
+    _connection_string = connection_string
 
     print(
         f"Starting IDHTM telemetry pipeline: "
         f"{connection_string}",
         flush=True,
     )
+    try:
+        # Create exactly ONE pipeline runner.
+        pipeline_runner = PipelineRunner(
+            connection_string=connection_string
+        )
 
-    # Create exactly ONE pipeline runner.
-    pipeline_runner = PipelineRunner(
-        connection_string=connection_string
-    )
+        pipeline_runner.start()
 
-    pipeline_runner.start()
+        # Give the bridge the SAME runner.
+        set_pipeline_runner(
+            pipeline_runner
+        )
 
-    # Give the bridge the SAME runner.
-    set_pipeline_runner(
-        pipeline_runner
-    )
-
-    # Start background telemetry processing.
-    asyncio.create_task(
-        telemetry_polling_loop()
-    )
-
+        # Start background telemetry processing.
+        asyncio.create_task(
+            telemetry_polling_loop()
+        )
+    except Exception as error:
+        print(
+            f"[startup] MAVLink pipeline unavailable, falling back to simulator: {error}",
+            flush=True,
+        )
+        pipeline_runner = None
 # Healthcheck
 
 @app.get("/api/healthcheck")
@@ -553,192 +619,6 @@ async def drone_location_socket(
 
         return
 
-# import asyncio
-
-# import sys
-# import os
-# sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../telemetry_pipeline')))
-# try:
-#     from src.orchestrator.pipeline_runner import PipelineRunner
-#     from src.integration.backend_adapter import adapt_to_backend
-#     PIPELINE_AVAILABLE = True
-# except ImportError:
-#     PIPELINE_AVAILABLE = False
-# from app.services.health.engine import calculate_health
-
-# from datetime import datetime, timezone
-# from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-# from fastapi.middleware.cors import CORSMiddleware
-
-# from app.core.clerk_auth import get_current_user, get_current_user_ws
-# from app.database.session import initialize, persist_telemetry
-# from app.schemas.telemetry import ScenarioRequest
-# from app.services.health.engine import explainable_rules, component_health
-# from app.services.telemetry.simulator import Simulator, SCENARIOS
-# from app.services.rule_engine import IDHTMRuleEngine
-# from app.services.telemetry.pipeline_bridge import get_latest_telemetry
-
-# app = FastAPI(title='IDHTM Telemetry API', version='1.0.0')
-# physics_engine = IDHTMRuleEngine()
-
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=['*'],
-#     allow_credentials=True,
-#     allow_methods=['*'],
-#     allow_headers=['*'],
-# )
-
-
-# pipeline_runner = None
-# latest_telemetry_state = None
-
-# async def telemetry_polling_loop():
-#     global latest_telemetry_state
-#     while True:
-#         if pipeline_runner and pipeline_runner.poll_once():
-#             state = pipeline_runner.get_state()
-#             legacy_dict = adapt_to_backend(state)
-#             legacy_dict['health_score'] = calculate_health(legacy_dict)
-#             latest_telemetry_state = legacy_dict
-#         await asyncio.sleep(0.02)
-
-# simulator = Simulator()
-
-# maintenance = [
-#     {
-#         'id': 'MNT-001',
-#         'component': 'Motor 2',
-#         'issue': 'Potential bearing wear',
-#         'recommendation': 'Inspect motor bearing before next extended flight.',
-#         'severity': 'Medium',
-#         'status': 'Pending',
-#         'created_at': '2026-08-21T14:50:00Z',
-#     }
-# ]
-
-# flights = [
-#     {
-#         'id': 'FLT-2026-0821-07',
-#         'date': '21 Aug 2026 · 14:32',
-#         'duration': '18m 42s',
-#         'health': 92,
-#         'alerts': 2,
-#         'summary': 'Stable survey flight. Minor signal fluctuation on descent.',
-#     },
-#     {
-#         'id': 'FLT-2026-0820-03',
-#         'date': '20 Aug 2026 · 09:18',
-#         'duration': '26m 11s',
-#         'health': 88,
-#         'alerts': 4,
-#         'summary': 'Extended inspection flight with rising motor vibration.',
-#     },
-#     {
-#         'id': 'FLT-2026-0818-11',
-#         'date': '18 Aug 2026 · 16:05',
-#         'duration': '12m 28s',
-#         'health': 97,
-#         'alerts': 0,
-#         'summary': 'Nominal mapping flight across the north sector.',
-#     },
-# ]
-
-# @app.on_event('startup')
-# def startup() -> None:
-#     initialize()
-
-#     global pipeline_runner
-#     if PIPELINE_AVAILABLE:
-#         pipeline_runner = PipelineRunner(connection_string=os.environ.get('MAVLINK_URL', 'udp:127.0.0.1:14550'))
-#         pipeline_runner.start()
-#         asyncio.create_task(telemetry_polling_loop())
-
-
-# @app.get('/api/healthcheck')
-# def healthcheck():
-#     return {
-#         'status': 'ok',
-#         'service': 'idhtm-api',
-#         'time': datetime.now(timezone.utc).isoformat(),
-#     }
-
-# @app.get('/api/drones')
-# def drones(user_id: str = Depends(get_current_user)):
-#     return [
-#         {
-#             'id': 'DRONE-01',
-#             'name': 'DRONE-01',
-#             'model': 'Industrial Survey Mk II',
-#             'status': 'simulator_active',
-#             'health': simulator.next()['health_score'],
-#         }
-#     ]
-
-# @app.get('/api/telemetry/scenarios')
-# def scenarios(user_id: str = Depends(get_current_user)):
-#     return [{'id': key, **value} for key, value in SCENARIOS.items()]
-
-# @app.post('/api/telemetry/scenario')
-# def set_scenario(request: ScenarioRequest, user_id: str = Depends(get_current_user)):
-#     try:
-#         simulator.set_scenario(request.scenario)
-#     except ValueError as error:
-#         raise HTTPException(422, str(error))
-#     return {'scenario': simulator.scenario, 'status': 'active'}
-
-# @app.get('/api/telemetry/latest')
-# def latest(user_id: str = Depends(get_current_user)):
-#     event = latest_telemetry_state.copy() if latest_telemetry_state else simulator.next()
-#     persist_telemetry(event, simulator.scenario)
-#     return event
-# @app.get('/api/telemetry/pipeline/latest')
-# def pipeline_latest(user_id: str = Depends(get_current_user)):
-#     event = get_latest_telemetry()
-#     return event
-
-
-# @app.get('/api/health')
-# def health(user_id: str = Depends(get_current_user)):
-#     event = latest_telemetry_state.copy() if latest_telemetry_state else simulator.next()
-#     return {
-#         'scenario': simulator.scenario,
-#         'score': event['health_score'],
-#         'components': component_health(event),
-#         'rules': explainable_rules(event),
-#     }
-
-# @app.get('/api/alerts')
-# def alerts(user_id: str = Depends(get_current_user)):
-#     event = latest_telemetry_state.copy() if latest_telemetry_state else simulator.next()
-#     base_alerts = [
-#         {
-#             **rule,
-#             'id': f"RULE-{rule['id'].upper()}",
-#             'timestamp': event['timestamp'],
-#             'acknowledged': False,
-#         }
-#         for rule in explainable_rules(event)
-#     ]
-
-#     # Injecting AI Rule Engine Logic for REST API
-#     voltage = event.get('voltage', 11.2)
-#     battery_eval = physics_engine.evaluate_battery_state(voltage)
-#     if battery_eval['status'] not in ["NORMAL", "STABLE"]:
-#         base_alerts.append({
-#             'id': f"RULE-BATT-{battery_eval['status']}",
-#             'message': f"Battery {battery_eval['status']}: {battery_eval['action']}",
-#             'severity': 'critical' if battery_eval['status'] in ['CRITICAL', 'EMERGENCY'] else 'warning',
-#             'timestamp': event['timestamp'],
-#             'acknowledged': False,
-#         })
-
-#     return base_alerts
-
-# @app.post('/api/alerts/{alert_id}/acknowledge')
-# def acknowledge(alert_id: str, user_id: str = Depends(get_current_user)):
-#     return {'id': alert_id, 'acknowledged': True}
-
 @app.get('/api/flights')
 def list_flights():
     return flights
@@ -822,89 +702,3 @@ def connections():
             'last_update': None,
         },
     ]
-
-# @app.websocket('/ws/telemetry')
-# async def telemetry_socket(websocket: WebSocket):
-#     user_id = await get_current_user_ws(websocket)
-#     if user_id is None:
-#         return
-#     await websocket.accept()
-#     try:
-#         while True:
-#             event = latest_telemetry_state.copy() if latest_telemetry_state else simulator.next()
-#             persist_telemetry(event, simulator.scenario)
-
-#             # --- AI RULE ENGINE INTEGRATION START ---
-#             dynamic_alerts = [
-#                 {
-#                     **rule,
-#                     'id': f"RULE-{rule['id'].upper()}",
-#                     'timestamp': event['timestamp'],
-#                     'acknowledged': False,
-#                 }
-#                 for rule in explainable_rules(event)
-#             ]
-
-#             # 1. Battery Health Processing
-#             voltage = event.get('voltage', 11.2) # Defaults to safe voltage if key is missing
-#             battery_eval = physics_engine.evaluate_battery_state(voltage)
-
-#             if battery_eval['status'] not in ["NORMAL", "STABLE"]:
-#                 dynamic_alerts.append({
-#                     'id': f"RULE-BATT-{battery_eval['status']}",
-#                     'message': f"Battery {battery_eval['status']}: {battery_eval['action']}",
-#                     'severity': 'critical' if battery_eval['status'] in ['CRITICAL', 'EMERGENCY'] else 'warning',
-#                     'timestamp': event['timestamp'],
-#                     'acknowledged': False,
-#                 })
-
-#             # 2. Motor Health Processing
-#             ax = event.get('ax', 0.0)
-#             ay = event.get('ay', 0.0)
-#             az = event.get('az', 0.0)
-#             motor_eval = physics_engine.evaluate_motor_health(ax, ay, az)
-
-#             if motor_eval['vibration_alert']:
-#                 dynamic_alerts.append({
-#                     'id': "RULE-MOTOR-VIBE",
-#                     'message': motor_eval['risk'],
-#                     'severity': 'critical',
-#                     'timestamp': event['timestamp'],
-#                     'acknowledged': False,
-#                 })
-#             # --- AI RULE ENGINE INTEGRATION END ---
-
-#             await websocket.send_json(
-#                 {
-#                     'scenario': simulator.scenario,
-#                     'telemetry': event,
-#                     'alerts': dynamic_alerts,
-#                 }
-#             )
-#             await asyncio.sleep(1)
-#     except (WebSocketDisconnect, asyncio.CancelledError):
-#         return
-
-# @app.websocket('/ws/drone-location')
-# async def drone_location_socket(websocket: WebSocket):
-#     user_id = await get_current_user_ws(websocket)
-#     if user_id is None:
-#         return
-#     await websocket.accept()
-#     try:
-#         while True:
-#             event = latest_telemetry_state.copy() if latest_telemetry_state else simulator.next()
-#             await websocket.send_json(
-#                 {
-#                     'drone_id': 'DRONE-01',
-#                     'flight_id': 'FLT-LIVE-01',
-#                     'timestamp': event['timestamp'],
-#                     'latitude': event['latitude'],
-#                     'longitude': event['longitude'],
-#                     'altitude': event['altitude'],
-#                     'heading': event['heading'],
-#                 }
-#             )
-#             await asyncio.sleep(1)
-#     except (WebSocketDisconnect, asyncio.CancelledError):
-#         return

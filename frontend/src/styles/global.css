@@ -4369,34 +4369,32 @@ input:focus-visible {
   background: transparent !important;
   border: 0 !important;
 }
-.idhtm-leaflet-drone {
-  position: relative;
-  width: 32px;
-  height: 32px;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: #2364a1;
-  box-shadow:
-    0 0 0 5px rgba(35, 100, 161, 0.16),
-    0 5px 14px rgba(35, 100, 161, 0.3);
+.idhtm-leaflet-aircraft {
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
-  color: #fff;
+  filter: drop-shadow(0 2px 4px rgba(35, 100, 161, 0.45));
 }
-.idhtm-leaflet-drone:before {
-  content: "";
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-bottom: 11px solid #fff;
-  transform: translateY(-1px);
+.idhtm-leaflet-home-icon {
+  background: transparent !important;
+  border: 0 !important;
 }
-.idhtm-leaflet-drone span {
-  position: absolute;
-  inset: -10px;
-  border: 1px solid rgba(35, 100, 161, 0.28);
-  border-radius: 50%;
+.idhtm-leaflet-home {
+  filter: drop-shadow(0 3px 5px rgba(189, 81, 77, 0.5));
+}
+.idhtm-leaflet-home svg {
+  fill: #bd514d;
+  stroke: #fff;
+  stroke-width: 0.8;
+}
+.idhtm-leaflet-home-dot {
+  fill: #fff;
+}
+.idhtm-leaflet-aircraft svg {
+  fill: #2364a1;
+  stroke: #fff;
+  stroke-width: 0.6;
 }
 .idhtm-openstreet-map .live-map-readout {
   z-index: 1000;
