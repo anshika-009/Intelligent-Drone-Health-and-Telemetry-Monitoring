@@ -26,12 +26,36 @@ class MAVLinkSource:
         self._is_open = False
 
     def connect(self) -> None:
-        """Establishes the MAVLink connection."""
+        """Establishes the MAVLink connection and requests telemetry streams.
+
+        Simply opening the socket is not enough: ArduPilot only ever sends
+        HEARTBEAT unsolicited. GLOBAL_POSITION_INT, SYS_STATUS, VFR_HUD,
+        GPS_RAW_INT and RAW_IMU are only sent on a given link if that link
+        has explicitly asked for them (this is per-connection, so Mission
+        Planner asking on its own link does NOT cause this link to receive
+        them too). Without this request, every field except HEARTBEAT-derived
+        ones stays None forever, which looks like "no live data" downstream.
+        """
         if mavutil is None:
             raise MAVLinkConnectionError("pymavlink is not installed.")
-            
+
         try:
             self._master = mavutil.mavlink_connection(self.connection_string)
+
+            # Wait for the first heartbeat so target_system/target_component
+            # are populated - required to address the stream request.
+            self._master.wait_heartbeat(timeout=10)
+
+            # Ask for every stream category at 10 Hz. MAV_DATA_STREAM_ALL
+            # covers POSITION, EXTRA1/2/3, RAW_SENSORS, EXTENDED_STATUS, etc.
+            self._master.mav.request_data_stream_send(
+                self._master.target_system,
+                self._master.target_component,
+                mavutil.mavlink.MAV_DATA_STREAM_ALL,
+                10,  # Hz
+                1,   # start streaming
+            )
+
             self._is_open = True
         except Exception as e:
             self._is_open = False

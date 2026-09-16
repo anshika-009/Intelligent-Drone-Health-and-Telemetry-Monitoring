@@ -33,6 +33,7 @@ export function DashboardPage() {
     simulatorActive,
     setSimulatorActive,
     acknowledgeAlert,
+    isConnected,
   } = useApp();
   const [showScenario, setShowScenario] = useState(false);
   const points = chartSeries.map(
@@ -208,7 +209,7 @@ export function DashboardPage() {
               {Math.abs(telemetry.longitude).toFixed(4)}° W
             </span>
           </div>
-          <MapScene location={telemetry} />
+                    <MapScene location={isConnected ? telemetry : undefined} />
         </section>
         <section className="flight-status panel">
           <div className="panel-head">

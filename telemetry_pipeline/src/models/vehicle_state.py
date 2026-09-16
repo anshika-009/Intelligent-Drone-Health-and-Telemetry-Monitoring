@@ -84,10 +84,14 @@ class VehicleState(BaseModel):
 
     # Battery
 
+    # MAVLink's SYS_STATUS.voltage_battery is a uint16 in millivolts,
+    # so the protocol's own ceiling is 65.535V. 50V was too tight for
+    # larger packs (e.g. 12S = 50.4V nominal max), which SITL/real
+    # airframes can legitimately report.
     battery_voltage: Optional[float] = Field(
         default=None,
         ge=0,
-        le=50,
+        le=65.535,
     )
 
     battery_current: Optional[float] = Field(
