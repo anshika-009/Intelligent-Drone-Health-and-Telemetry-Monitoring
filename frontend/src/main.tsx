@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import { ClerkProvider, useAuth } from "@clerk/react";
 import { dark } from "@clerk/themes";
@@ -57,8 +57,16 @@ if (!CLERK_PUBLISHABLE_KEY) {
 
 function Protected() {
   const { isLoaded, isSignedIn } = useAuth();
-  
+  const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (isLoaded) return;
+    const timer = setTimeout(() => setTimedOut(true), 3000);
+    return () => clearTimeout(timer);
+  }, [isLoaded]);
+
   if (!isLoaded) {
+    if (timedOut) return <Navigate to="/" replace />;
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <div className="spin-anim" style={{ width: '24px', height: '24px', border: '2px solid #cbd8e3', borderTopColor: '#2364a1', borderRadius: '50%' }}></div>
