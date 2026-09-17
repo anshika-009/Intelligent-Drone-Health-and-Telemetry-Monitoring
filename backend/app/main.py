@@ -92,7 +92,6 @@ from app.database.session import (
 
 from app.services.health.engine import (
     analyze_health,
-    component_health,
     explainable_rules,
 )
 
@@ -179,7 +178,6 @@ async def telemetry_polling_loop():
 
     global latest_telemetry_state
     global latest_health_analysis
-    global pipeline_runner
 
     STALE_TIMEOUT_SECONDS = 5.0
     RECONNECT_COOLDOWN_SECONDS = 3.0
@@ -196,9 +194,10 @@ async def telemetry_polling_loop():
         except Exception as stop_error:
             print(f"[pipeline] error while stopping old connection: {stop_error}", flush=True)
         try:
-            pipeline_runner.start()
-            set_pipeline_runner(pipeline_runner)
-            print("[pipeline] reconnected to MAVLink source", flush=True)
+            if pipeline_runner:
+                pipeline_runner.start()
+                set_pipeline_runner(pipeline_runner)
+                print("[pipeline] reconnected to MAVLink source", flush=True)
             last_message_time = time.monotonic()
         except Exception as start_error:
             print(
@@ -209,11 +208,8 @@ async def telemetry_polling_loop():
         next_reconnect_attempt = time.monotonic() + RECONNECT_COOLDOWN_SECONDS
 
     while True:
-
         try:
-
             if pipeline_runner:
-
                 now = time.monotonic()
 
                 transport_down = not pipeline_runner.is_active
@@ -263,16 +259,13 @@ async def telemetry_polling_loop():
                             telemetry,
                             "live_mavlink",
                         )
-
         except Exception as error:
-
             # Do not kill the telemetry loop if one packet
             # causes an unexpected processing error.
             print(
                 f"Telemetry processing error: {error}",
                 flush=True,
             )
-
         # 50 Hz polling loop.
         #
         # The aggregator itself handles message rates
@@ -282,19 +275,16 @@ async def telemetry_polling_loop():
 # Startup
 @app.on_event("startup")
 def startup() -> None:
-
     global pipeline_runner
     global _connection_string
 
     initialize()
 
     if not PIPELINE_AVAILABLE:
-
         print(
             "Telemetry pipeline is unavailable.",
             flush=True,
         )
-
         return
     
     connection_string = os.environ.get(
@@ -349,7 +339,6 @@ def healthcheck():
 
 @app.get("/api/drones")
 def drones():
-
     telemetry = latest_telemetry_state
 
     return [
