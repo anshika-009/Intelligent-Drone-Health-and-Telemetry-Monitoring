@@ -65,7 +65,7 @@ def battery_rule(telemetry: dict[str, Any]) -> dict[str, Any] | None:
     battery = telemetry.get("battery_percentage")
 
     # No battery information available.
-    if not is_available(battery):
+    if battery is None:
         return None
 
     if battery < 20:
@@ -114,7 +114,7 @@ def signal_rule(telemetry: dict[str, Any]) -> dict[str, Any] | None:
 
     signal = telemetry.get("signal_strength")
 
-    if not is_available(signal):
+    if signal is None:
         return None
 
     if signal < 25:
@@ -229,7 +229,7 @@ def vibration_rule(telemetry: dict[str, Any]) -> dict[str, Any] | None:
 
     vibration = telemetry.get("vibration")
 
-    if not is_available(vibration):
+    if vibration is None:
         return None
 
     if vibration > 0.65:
@@ -281,7 +281,7 @@ def temperature_rule(
 
     temperature = telemetry.get("temperature")
 
-    if not is_available(temperature):
+    if temperature is None:
         return None
 
     if temperature > 70:
