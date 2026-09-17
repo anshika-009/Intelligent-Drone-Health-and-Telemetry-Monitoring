@@ -3,33 +3,86 @@ import { Pause, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Metric, SectionHeading } from '../../components/common';
 import { useApp } from '../../store/AppStore';
-import { createReplayRoute, interpolateReplayLocation, MapScene } from './shared/MapScene';
+import {
+  createReplayRoute,
+  interpolateReplayLocation,
+  MapScene,
+} from './shared/MapScene';
 
 export function ReplayPage() {
   const { telemetry } = useApp();
+
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(62);
   const [speed, setSpeed] = useState(1);
 
   const replayRoute = createReplayRoute(telemetry);
-  const replayLocation = interpolateReplayLocation(telemetry, replayRoute, progress);
+
+  const replayLocation = interpolateReplayLocation(
+    telemetry,
+    replayRoute,
+    progress,
+  );
 
   useEffect(() => {
     if (!playing) return;
 
     const intervalMs = 1000 / speed;
+
     const timer = window.setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 100) return 100;
-        return Math.min(100, prev + 1.5 * speed);
+      setProgress(previousProgress => {
+        if (previousProgress >= 100) {
+          setPlaying(false);
+          return 100;
+        }
+
+        return Math.min(100, previousProgress + 1.5 * speed);
       });
     }, intervalMs);
 
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+    };
   }, [playing, speed]);
 
-  const replaySpeed = Math.max(18, Math.min(88, 20 + progress * 0.7)).toFixed(0);
-  const replayHealth = Math.max(50, Math.min(100, 100 - progress * 0.2)).toFixed(0);
+  /*
+   * These values represent the replay state at the current progress.
+   *
+   * The current repository route contains map coordinates only, so the
+   * additional replay metrics are derived from the replay progress.
+   */
+  const replayAltitude = (
+    telemetry.altitude + Math.sin((progress / 100) * Math.PI) * 35
+  ).toFixed(0);
+
+  const replaySpeed = (
+    telemetry.ground_speed +
+    Math.sin((progress / 100) * Math.PI * 2) * 8
+  ).toFixed(0);
+
+  const replayHealth = Math.max(
+    0,
+    Math.round(telemetry.health_score - progress * 0.08),
+  ).toString();
+
+  const replaySector = `Sector ${Math.min(
+    4,
+    Math.max(1, Math.ceil(progress / 25)),
+  )}`;
+
+  const handleProgressChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    setProgress(Number(event.target.value));
+  };
+
+  const handlePlayPause = () => {
+    if (!playing && progress >= 100) {
+      setProgress(0);
+    }
+
+    setPlaying(previousPlaying => !previousPlaying);
+  };
 
   return (
     <div className="page">
@@ -37,16 +90,27 @@ export function ReplayPage() {
         eyebrow="FLIGHT REPLAY / STORED DATA"
         title="Replay a flight"
         copy="The map, metrics, and alert timeline are driven from the stored flight session."
-        action={<Link to="/app/flights" className="button ghost">← All flights</Link>}
+        action={
+          <Link to="/app/flights" className="button ghost">
+            ← All flights
+          </Link>
+        }
       />
 
       <div className="replay-panel panel">
-        <MapScene variant="replay" progress={progress} location={replayLocation} route={replayRoute} />
+        <MapScene
+          variant="replay"
+          progress={progress}
+          location={replayLocation}
+          route={replayRoute}
+        />
 
         <div className="replay-controls">
           <button
+            type="button"
             className="play-button"
-            onClick={() => setPlaying(prev => !prev)}
+            aria-label={playing ? 'Pause replay' : 'Play replay'}
+            onClick={handlePlayPause}
           >
             {playing ? <Pause size={18} /> : <Play size={18} />}
           </button>
@@ -57,8 +121,10 @@ export function ReplayPage() {
               min="0"
               max="100"
               value={progress}
-              onChange={e => setProgress(Number(e.target.value))}
+              aria-label="Replay progress"
+              onChange={handleProgressChange}
             />
+
             <div>
               <span>14:32:18</span>
               <span>14:50:59</span>
@@ -66,13 +132,15 @@ export function ReplayPage() {
           </div>
 
           <div className="speed-buttons">
-            {[1, 2, 4].map(value => (
+            {[1, 2, 4].map(replaySpeedValue => (
               <button
-                key={value}
-                className={speed === value ? 'active' : ''}
-                onClick={() => setSpeed(value)}
+                type="button"
+                key={replaySpeedValue}
+                className={speed === replaySpeedValue ? 'active' : ''}
+                aria-pressed={speed === replaySpeedValue}
+                onClick={() => setSpeed(replaySpeedValue)}
               >
-                {value}×
+                {replaySpeedValue}×
               </button>
             ))}
           </div>
@@ -80,10 +148,10 @@ export function ReplayPage() {
       </div>
 
       <div className="replay-metrics">
-        <Metric label="Altitude" value={replayLocation.altitude.toFixed(0)} unit="m" />
+        <Metric label="Altitude" value={replayAltitude} unit="m" />
         <Metric label="Speed" value={replaySpeed} unit="km/h" />
         <Metric label="Health" value={replayHealth} unit="/100" />
-        <Metric label="Position" value={`Sector ${Math.min(4, Math.max(1, Math.ceil(progress / 25)))}`} />
+        <Metric label="Position" value={replaySector} />
       </div>
     </div>
   );
