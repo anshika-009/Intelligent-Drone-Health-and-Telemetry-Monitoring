@@ -1,9 +1,11 @@
-"""Postgres persistence for flights and their telemetry.
+"""Postgres persistence for users, flights and their telemetry.
 
 Tables
 ------
-flights           one row per flight session, owned by a Clerk user_id
+users             one row per Clerk user_id
+flights           one row per flight session, owned by a user
 flight_telemetry  one row per telemetry snapshot, linked to a flight
+drone_home        each user's LAST KNOWN home for a drone (display only)
 
 Connection string comes from DATABASE_URL (docker-compose already sets it).
 """
@@ -120,9 +122,9 @@ def initialize() -> None:
         END IF;
     END $$
     """)
-    # Table 3: drone_home. One permanent home position per (user, drone). Written once (first valid GPS
-    # fix ever seen) and shared by every later flight, so it does not move
-    # when a flight is stopped/started or the backend restarts.
+    # Table 3: drone_home. Each user's LAST KNOWN home for a drone, updated
+    # when a new flight records its own first fix. Display only (GET
+    # /api/home) - it never decides which flight is resumed.
     _run("""
     CREATE TABLE IF NOT EXISTS drone_home (
         user_id        TEXT NOT NULL REFERENCES users(user_id),
@@ -195,25 +197,28 @@ def ensure_user(user_id: str) -> None:
 def resume_or_start_flight(user_id: str, drone_id: str, scenario: str) -> tuple[int, bool]:
     """Return (flight_id, resumed).
 
-    If this user's drone already has a home and they have a flight that
-    belongs to that home, that SAME flight is reopened and keeps receiving telemetry.
-    Otherwise a fresh flight is created."""
+    Resume this user's most recent flight for this drone only if the gap
+    since it stopped is short enough to be a genuine interruption (a page
+    refresh, a brief MAVLink drop) - not "the drone happened to take off
+    from the same place again". Anything older always starts a brand new
+    flight, so two unrelated sessions never get silently merged into one
+    flight row just because they share a home position."""
     ensure_user(user_id)
-    home = get_drone_home(user_id, drone_id)
-    if home:
-        row = _run(
-            """
-            SELECT id FROM flights
-            WHERE user_id = %s AND drone_id = %s
-              AND home_latitude = %s AND home_longitude = %s
-            ORDER BY started_at DESC LIMIT 1
-            """,
-            (user_id, drone_id, home["latitude"], home["longitude"]),
-            fetch="one",
-        )
-        if row:
-            _run("UPDATE flights SET ended_at = NULL WHERE id = %s", (row["id"],))
-            return row["id"], True
+    RESUME_WINDOW_SECONDS = 120
+    row = _run(
+        """
+        SELECT id FROM flights
+        WHERE user_id = %s AND drone_id = %s
+          AND (ended_at IS NULL OR ended_at > now() - (%s * interval '1 second'))
+        ORDER BY started_at DESC
+        LIMIT 1
+        """,
+        (user_id, drone_id, RESUME_WINDOW_SECONDS),
+        fetch="one",
+    )
+    if row:
+        _run("UPDATE flights SET ended_at = NULL WHERE id = %s", (row["id"],))
+        return row["id"], True
     return start_flight(user_id, drone_id, scenario), False
 
 
@@ -256,28 +261,40 @@ def get_drone_home(user_id: str, drone_id: str) -> dict | None:
 
 
 def record_flight_home(flight_id: int, latitude: float, longitude: float, altitude: float | None) -> dict | None:
-    """Give a flight its home position.
+    """Give this flight its own home position, from its own first GPS fix.
 
-    The user's home for this drone is created from this position only if
-    they have none yet (INSERT ... ON CONFLICT DO NOTHING); otherwise the EXISTING
-    home is reused. The flight row then gets a copy of that home. Returns
-    the home that was applied."""
+    If the flight ALREADY has a home (for example it was resumed after a
+    pause, so the caller is passing a mid-flight position), nothing is
+    changed and the existing home is returned. Only when this call really
+    sets the flight's home is the user's "last known home" refreshed."""
     flight = _run("SELECT user_id, drone_id FROM flights WHERE id = %s", (flight_id,), fetch="one")
     if not flight:
         return None
     user_id, drone_id = flight["user_id"], flight["drone_id"]
+
+    if not set_flight_home(flight_id, latitude, longitude, altitude):
+        row = _run(
+            "SELECT home_latitude, home_longitude, home_altitude FROM flights WHERE id = %s",
+            (flight_id,),
+            fetch="one",
+        )
+        return {
+            "latitude": row["home_latitude"],
+            "longitude": row["home_longitude"],
+            "altitude": row["home_altitude"],
+        }
+
     _run(
         """
         INSERT INTO drone_home (user_id, drone_id, latitude, longitude, altitude, set_by_flight)
         VALUES (%s, %s, %s, %s, %s, %s)
-        ON CONFLICT (user_id, drone_id) DO NOTHING
+        ON CONFLICT (user_id, drone_id) DO UPDATE
+        SET latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude,
+            altitude = EXCLUDED.altitude, set_at = now(), set_by_flight = EXCLUDED.set_by_flight
         """,
         (user_id, drone_id, latitude, longitude, altitude, flight_id),
     )
-    home = get_drone_home(user_id, drone_id)
-    if home:
-        set_flight_home(flight_id, home["latitude"], home["longitude"], home["altitude"])
-    return home
+    return {"latitude": latitude, "longitude": longitude, "altitude": altitude}
 
 
 def reset_drone_home(user_id: str, drone_id: str) -> None:
@@ -295,8 +312,13 @@ def reset_drone_home(user_id: str, drone_id: str) -> None:
 
 
 def get_flight_home(flight_id: int) -> dict | None:
+    """The flight's OWN home, or None until its first GPS fix is recorded.
+
+    There is deliberately no fallback to the user's last-known home: that
+    would show the previous flight's location (possibly a different city)
+    on the map until the new flight's own home arrives, then jump."""
     row = _run(
-        "SELECT user_id, drone_id, started_at, home_latitude, home_longitude, home_altitude FROM flights WHERE id = %s",
+        "SELECT started_at, home_latitude, home_longitude, home_altitude FROM flights WHERE id = %s",
         (flight_id,),
         fetch="one",
     )
@@ -309,11 +331,6 @@ def get_flight_home(flight_id: int) -> dict | None:
             "longitude": row["home_longitude"],
             "altitude": row["home_altitude"],
         }
-    if home is None:
-        # Flight has no copy yet, but the drone may already have a home.
-        drone_home = get_drone_home(row["user_id"], row["drone_id"])
-        if drone_home:
-            home = {k: drone_home[k] for k in ("latitude", "longitude", "altitude")}
     return {"started_at": _iso(row["started_at"]), "home": home}
 
 

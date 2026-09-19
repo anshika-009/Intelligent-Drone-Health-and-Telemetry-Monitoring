@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -20,7 +20,7 @@ import {
 } from "../../components/common";
 import { chartSeries, components, scenarioLabels } from "../../data/mock";
 import { useApp } from "../../store/AppStore";
-import type { Scenario } from "../../types";
+import type { Scenario, Telemetry } from "../../types";
 import { MapScene } from "./shared/MapScene";
 import { ScenarioPicker } from "./shared/ScenarioPicker";
 
@@ -34,8 +34,33 @@ export function DashboardPage() {
     setSimulatorActive,
     acknowledgeAlert,
     isConnected,
+    startTelemetryFeed,
+    stopTelemetryFeed,
+    homePosition,
   } = useApp();
   const [showScenario, setShowScenario] = useState(false);
+
+  // The backend only connects to the drone while a flight is open, so
+  // opening the dashboard (with the feed running) must start one, and
+  // leaving it must end it. Without this the backend stays idle and
+  // /api/telemetry/latest returns 503.
+  // Keep the map on the last REAL position while the feed is paused (or
+  // the link drops). Passing `undefined` there makes the map fall back to
+  // its default centre (San Francisco) and pan away from the flight.
+  const lastLiveTelemetry = useRef<Telemetry | undefined>(undefined);
+  if (isConnected) lastLiveTelemetry.current = telemetry;
+  const mapLocation = isConnected ? telemetry : lastLiveTelemetry.current;
+
+  const feedRunning = useRef(simulatorActive);
+  feedRunning.current = simulatorActive;
+  useEffect(() => {
+    if (feedRunning.current) startTelemetryFeed();
+    return () => {
+      if (feedRunning.current) stopTelemetryFeed();
+    };
+    // Mount/unmount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const points = chartSeries.map(
     (_, i) => telemetry.altitude + Math.sin(i) * 8,
   );
@@ -209,7 +234,12 @@ export function DashboardPage() {
               {Math.abs(telemetry.longitude).toFixed(4)}° W
             </span>
           </div>
-                    <MapScene location={isConnected ? telemetry : undefined} />
+                    <MapScene
+            location={mapLocation}
+            home={homePosition}
+            offline={!isConnected}
+            offlineMessage={simulatorActive ? 'Simulator offline' : 'Telemetry paused'}
+          />
         </section>
         <section className="flight-status panel">
           <div className="panel-head">
