@@ -44,7 +44,17 @@ class MAVLinkSource:
 
             # Wait for the first heartbeat so target_system/target_component
             # are populated - required to address the stream request.
-            self._master.wait_heartbeat(timeout=10)
+            heartbeat = self._master.wait_heartbeat(timeout=10)
+            if heartbeat is None:
+                # wait_heartbeat() does NOT raise on timeout, it returns
+                # None. Treating that as "connected" leaves a dead link
+                # that never produces data. Fail loudly instead.
+                raise MAVLinkConnectionError(
+                    "the port accepted the connection but no MAVLink "
+                    "heartbeat arrived within 10s (is the simulator "
+                    "running, and is another program already using this "
+                    "port?)"
+                )
 
             # Ask for every stream category at 10 Hz. MAV_DATA_STREAM_ALL
             # covers POSITION, EXTRA1/2/3, RAW_SENSORS, EXTENDED_STATUS, etc.
@@ -59,6 +69,12 @@ class MAVLinkSource:
             self._is_open = True
         except Exception as e:
             self._is_open = False
+            if self._master is not None:
+                try:
+                    self._master.close()
+                except Exception:
+                    pass
+                self._master = None
             raise MAVLinkConnectionError(f"Failed to connect to {self.connection_string}: {e}")
 
     @property

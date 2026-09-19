@@ -9,7 +9,7 @@ type NavIcon = ComponentType<{ size?: number }>;
 type NavItem = { label: string; to: string; Icon: NavIcon };
 const groups: { label: string; items: NavItem[] }[] = [
   { label: 'Monitoring', items: [{ label: 'Dashboard', to: '/app/dashboard', Icon: LayoutDashboard }, { label: 'Cockpit', to: '/app/cockpit', Icon: Gauge }, { label: 'Health', to: '/app/health', Icon: ShieldCheck }, { label: 'Alerts', to: '/app/alerts', Icon: Bell }] },
-  { label: 'Flight operations', items: [{ label: 'Flights', to: '/app/flights', Icon: History }, { label: 'Flight replay', to: '/app/flights/FLT-2026-0821-07/replay', Icon: Radio }] },
+  { label: 'Flight operations', items: [{ label: 'Flights', to: '/app/flights', Icon: History }, { label: 'Flight replay', to: '/app/replay', Icon: Radio }] },
   { label: 'Operations', items: [{ label: 'Maintenance', to: '/app/maintenance', Icon: Wrench }, { label: 'Reports', to: '/app/reports', Icon: FileText }] },
   { label: 'System', items: [{ label: 'Connections', to: '/app/connections', Icon: Cpu }, { label: 'Settings', to: '/app/settings', Icon: Settings }] }
 ];
@@ -22,7 +22,7 @@ export function AppShell() {
   const { user } = useUser();
 
   const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'Flight operator';
-  const title = location.pathname.includes('cockpit') ? 'Cockpit' : location.pathname.includes('health') ? 'Health' : location.pathname.includes('alerts') ? 'Alerts' : location.pathname.includes('flights') ? 'Flights' : location.pathname.includes('maintenance') ? 'Maintenance' : location.pathname.includes('reports') ? 'Reports' : location.pathname.includes('connections') ? 'Connections' : location.pathname.includes('settings') ? 'Settings' : 'Dashboard';
+  const title = location.pathname.includes('cockpit') ? 'Cockpit' : location.pathname.includes('health') ? 'Health' : location.pathname.includes('alerts') ? 'Alerts' : location.pathname.includes('flights') ? 'Flights' : location.pathname.includes('replay') ? 'Flight replay' : location.pathname.includes('maintenance') ? 'Maintenance' : location.pathname.includes('reports') ? 'Reports' : location.pathname.includes('connections') ? 'Connections' : location.pathname.includes('settings') ? 'Settings' : 'Dashboard';
 
   return (
     <div className="app-shell">

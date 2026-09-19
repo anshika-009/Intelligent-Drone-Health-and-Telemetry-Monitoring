@@ -164,6 +164,53 @@ homes_recorded: set[int] = set()
 # to re-read the environment each time.
 _connection_string: str | None = None
 
+# ---------------------------------------------------------
+# Pipeline activation gate
+# ---------------------------------------------------------
+#
+# The MAVLink pipeline must NOT run just because the backend process is
+# up. It should only be connected/polling while someone actually has the
+# dashboard open AND has it set to "running" (not paused) - that's what
+# an entry in `active_flights` represents. Outside of that window the
+# transport is fully closed, so no telemetry (good or bad, e.g. the
+# (0,0)/simulator-default GPS placeholder emitted right after a
+# reconnect) can be produced or persisted.
+#
+# This does NOT affect reading past flights: `/api/flights` and
+# `/api/flights/{id}` read straight from Postgres and never touch the
+# pipeline, so historical flight logs stay visible regardless of
+# whether the pipeline is currently active.
+_pipeline_should_run = False
+
+# Wall-clock bookkeeping for the staleness watchdog. Kept at module
+# scope (rather than local to telemetry_polling_loop) so activation/
+# deactivation can reset them cleanly.
+_last_message_time = time.monotonic()
+_next_reconnect_attempt = 0.0
+
+
+def _activate_pipeline() -> None:
+    """Request that the MAVLink transport be turned on. Called when the
+    first user's dashboard starts a flight (dashboard open + not
+    paused).
+
+    IMPORTANT: this only flips a flag. FastAPI's sync `def` request
+    handlers run in a worker thread, separate from the asyncio event
+    loop that telemetry_polling_loop() runs on. The actual
+    connect()/close() calls on the MAVLink socket must only ever happen
+    from telemetry_polling_loop() itself (the loop already owns that
+    socket exclusively), so the loop is the one that reacts to this
+    flag, not this function."""
+    global _pipeline_should_run
+    _pipeline_should_run = True
+
+
+def _deactivate_pipeline() -> None:
+    """Request that the MAVLink transport be turned off - see
+    _activate_pipeline() for why this only flips a flag."""
+    global _pipeline_should_run
+    _pipeline_should_run = False
+
 
 # ---------------------------------------------------------
 # Flight recording settings
@@ -265,15 +312,14 @@ async def telemetry_polling_loop():
 
     global latest_telemetry_state
     global latest_health_analysis
+    global _last_message_time
+    global _next_reconnect_attempt
 
     STALE_TIMEOUT_SECONDS = 5.0
     RECONNECT_COOLDOWN_SECONDS = 3.0
 
-    last_message_time = time.monotonic()
-    next_reconnect_attempt = 0.0
-
     def force_reconnect(reason: str) -> None:
-        nonlocal last_message_time, next_reconnect_attempt
+        global _last_message_time, _next_reconnect_attempt
         print(f"[pipeline] forcing reconnect ({reason})", flush=True)
         try:
             if pipeline_runner:
@@ -285,31 +331,67 @@ async def telemetry_polling_loop():
                 pipeline_runner.start()
                 set_pipeline_runner(pipeline_runner)
                 print("[pipeline] reconnected to MAVLink source", flush=True)
-            last_message_time = time.monotonic()
+            _last_message_time = time.monotonic()
         except Exception as start_error:
             print(
                 f"[pipeline] reconnect failed, retrying in "
                 f"{RECONNECT_COOLDOWN_SECONDS}s: {start_error}",
                 flush=True,
             )
-        next_reconnect_attempt = time.monotonic() + RECONNECT_COOLDOWN_SECONDS
+        _next_reconnect_attempt = time.monotonic() + RECONNECT_COOLDOWN_SECONDS
 
     while True:
         try:
             if pipeline_runner:
                 now = time.monotonic()
 
-                transport_down = not pipeline_runner.is_active
-                stale = (now - last_message_time) > STALE_TIMEOUT_SECONDS
+                # Dashboard just opened / resumed from paused (or this is
+                # recovering from an unexpected drop while still desired
+                # to run): (re)open the transport here, on the loop's own
+                # thread, subject to the same cooldown as any other
+                # reconnect attempt.
+                if (
+                    _pipeline_should_run
+                    and not pipeline_runner.is_active
+                    and now >= _next_reconnect_attempt
+                ):
+                    try:
+                        # start() can block for up to 10s (waiting for the
+                        # first heartbeat). Run it in a worker thread so the
+                        # whole API does not freeze while it waits.
+                        await asyncio.to_thread(pipeline_runner.start)
+                        set_pipeline_runner(pipeline_runner)
+                        _last_message_time = time.monotonic()
+                        print("[pipeline] activated (dashboard running)", flush=True)
+                    except Exception as start_error:
+                        print(
+                            f"[pipeline] activation failed, retrying in "
+                            f"{RECONNECT_COOLDOWN_SECONDS}s: {start_error}",
+                            flush=True,
+                        )
+                    _next_reconnect_attempt = time.monotonic() + RECONNECT_COOLDOWN_SECONDS
 
-                if (transport_down or stale) and now >= next_reconnect_attempt:
-                    force_reconnect(
-                        "transport reported inactive"
-                        if transport_down
-                        else f"no data for over {STALE_TIMEOUT_SECONDS}s"
-                    )
+                # Dashboard paused / closed (no user has an open flight
+                # any more): close the transport so nothing more gets
+                # produced or persisted until it's reactivated.
+                elif not _pipeline_should_run and pipeline_runner.is_active:
+                    try:
+                        pipeline_runner.stop()
+                        print("[pipeline] deactivated (dashboard paused/closed)", flush=True)
+                    except Exception as stop_error:
+                        print(f"[pipeline] error while stopping connection: {stop_error}", flush=True)
 
-                if pipeline_runner.is_active:
+                if _pipeline_should_run and pipeline_runner.is_active:
+
+                    stale = (now - _last_message_time) > STALE_TIMEOUT_SECONDS
+                    if stale and now >= _next_reconnect_attempt:
+                        # Blocking (stop + start), so keep it off the event loop.
+                        await asyncio.to_thread(
+                            force_reconnect,
+                            f"no data for over {STALE_TIMEOUT_SECONDS}s",
+                        )
+
+                if _pipeline_should_run and pipeline_runner.is_active:
 
                     # Drain queued MAVLink messages so the backend does not
                     # publish an increasingly old packet from the receive queue.
@@ -317,7 +399,7 @@ async def telemetry_polling_loop():
 
                     if processed:
 
-                        last_message_time = time.monotonic()
+                        _last_message_time = time.monotonic()
 
                         # Get aggregated canonical state.
                         state = pipeline_runner.get_state()
@@ -370,8 +452,21 @@ async def telemetry_polling_loop():
                                     and not _changed(snapshot, telemetry)
                                 ):
                                     continue
+                            # Never write a placeholder/no-fix position as if
+                            # it were a real point - that's what produces the
+                            # "zigzag fan" on the map (straight lines jumping
+                            # between the real track and a (0,0) or simulator
+                            # default coordinate). Everything else about the
+                            # snapshot (battery, health, etc.) is still saved.
+                            if _has_valid_position(telemetry):
+                                to_save = telemetry
+                            else:
+                                to_save = dict(telemetry)
+                                to_save["latitude"] = None
+                                to_save["longitude"] = None
+
                             try:
-                                persist_telemetry(flight_id, telemetry)
+                                persist_telemetry(flight_id, to_save)
                                 last_saved[flight_id] = (save_time, dict(telemetry))
                             except Exception as db_error:
                                 print(
@@ -417,24 +512,29 @@ def startup() -> None:
     _connection_string = connection_string
 
     print(
-        f"Starting IDHTM telemetry pipeline: "
-        f"{connection_string}",
+        f"Telemetry pipeline configured for: {connection_string} "
+        f"(will connect once the dashboard opens with telemetry running)",
         flush=True,
     )
     try:
-        # Create exactly ONE pipeline runner.
+        # Create exactly ONE pipeline runner. IMPORTANT: do NOT call
+        # .start() here. Constructing PipelineRunner/MAVLinkSource does
+        # not open any socket by itself (.connect() is what does that),
+        # so this is safe to do unconditionally at boot. The actual
+        # MAVLink connection is opened later, on demand, by
+        # _activate_pipeline() - i.e. the first time a user's dashboard
+        # starts a flight (dashboard open + telemetry set to running).
         pipeline_runner = PipelineRunner(
             connection_string=connection_string
         )
 
-        pipeline_runner.start()
-
-        # Give the bridge the SAME runner.
+        # Give the bridge the SAME runner (not yet connected).
         set_pipeline_runner(
             pipeline_runner
         )
 
-        # Start background telemetry processing.
+        # Start background telemetry processing. It stays idle
+        # (see _pipeline_should_run) until a dashboard activates it.
         asyncio.create_task(
             telemetry_polling_loop()
         )
@@ -739,21 +839,33 @@ def flight_start(user_id: str = Depends(get_current_user)):
     with _flight_lock:
         if user_id in active_flights:
             return {'flight_id': active_flights[user_id], 'status': 'already_active'}
+        # If nobody else currently has a flight open, this call is the
+        # one that's actually turning the pipeline on (dashboard opened
+        # / resumed from paused).
+        was_idle = len(active_flights) == 0
         flight_id, resumed = resume_or_start_flight(
             user_id, drone_id='DRONE-01', scenario='live_mavlink'
         )
         active_flights[user_id] = flight_id
+        if was_idle:
+            _activate_pipeline()
         return {'flight_id': flight_id, 'status': 'resumed' if resumed else 'started'}
 
 @app.post('/api/flights/end')
 def flight_end(user_id: str = Depends(get_current_user)):
     with _flight_lock:
         flight_id = active_flights.pop(user_id, None)
+        # If that was the last open flight, nobody has the dashboard
+        # running any more - shut the pipeline down. Past flights (this
+        # one included) stay fully readable from Postgres either way.
+        now_idle = len(active_flights) == 0
     if flight_id is None:
         raise HTTPException(404, 'No active flight to end.')
     last_saved.pop(flight_id, None)
     homes_recorded.discard(flight_id)
     end_flight(flight_id)
+    if now_idle:
+        _deactivate_pipeline()
     return {'flight_id': flight_id, 'status': 'ended'}
 
 @app.get('/api/flights')

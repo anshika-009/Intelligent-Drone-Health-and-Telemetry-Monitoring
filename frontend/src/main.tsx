@@ -149,6 +149,7 @@ function App() {
         <Route path="/app/health" element={<HealthPage />} />
         <Route path="/app/alerts" element={<AlertsPage />} />
         <Route path="/app/flights" element={<FlightsPage />} />
+        <Route path="/app/replay" element={<ReplayPage />} />
         <Route path="/app/flights/:flightId/replay" element={<ReplayPage />} />
         <Route path="/app/flights/:flightId" element={<FlightDetailPage />} />
         <Route path="/app/maintenance" element={<MaintenancePage />} />

@@ -4370,8 +4370,8 @@ input:focus-visible {
   border: 0 !important;
 }
 .idhtm-leaflet-aircraft {
-  width: 26px;
-  height: 26px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
   filter: drop-shadow(0 2px 4px rgba(35, 100, 161, 0.45));
@@ -4401,6 +4401,40 @@ input:focus-visible {
 }
 .idhtm-openstreet-map .map-attribution {
   z-index: 1000;
+}
+.live-map-offline-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(230, 239, 237, 0.55);
+  pointer-events: none;
+}
+.live-map-offline-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(210, 223, 224, 0.92);
+  border-radius: 4px;
+  box-shadow: 0 10px 26px rgba(55, 82, 91, 0.14);
+  color: #bd514d;
+}
+.live-map-offline-badge strong {
+  display: block;
+  font: 12px "DM Mono";
+  letter-spacing: 0.04em;
+  color: #1b2530;
+}
+.live-map-offline-badge span {
+  display: block;
+  margin-top: 3px;
+  font: 10px "DM Mono";
+  letter-spacing: 0.02em;
+  color: #687680;
 }
 @media (max-width: 760px) {
   .idhtm-openstreet-map .leaflet-control-zoom {

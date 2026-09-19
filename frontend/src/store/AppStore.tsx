@@ -34,6 +34,8 @@ type Store = {
   setScenario: (s: Scenario) => void;
   simulatorActive: boolean;
   setSimulatorActive: (v: boolean) => void;
+  startTelemetryFeed: () => void;
+  stopTelemetryFeed: () => void;
   isConnected: boolean;
   alerts: Alert[];
   acknowledgeAlert: (id: string) => void;
@@ -195,35 +197,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getTokenRef.current = getToken;
   }, [getToken]);
 
-  const setSimulatorActive = (next: boolean) => {
-    setSimulatorActiveState(next);
-    void (async () => {
-      try {
-        const token = await getTokenRef.current();
-        await apiFetch(next ? "/flights/start" : "/flights/end", token, {
-          method: "POST",
-        });
-      } catch (err) {
-        console.error("[flights] start/end request failed:", err);
-      }
-    })();
-  };
-
-  // Start a flight automatically when the app loads. The backend returns
-  // "already_active" if one exists, so repeating this is harmless.
-  useEffect(() => {
-    if (!simulatorActive) return;
+  // Talk to the backend without touching the `simulatorActive` preference
+  // itself. Used by the Dashboard page's own mount/unmount effect (see
+  // DashboardPage.tsx) so the pipeline is only ever actually connected
+  // while the dashboard is open - navigating away calls stopTelemetryFeed()
+  // without flipping the user's running/paused choice, so coming back
+  // resumes exactly where they left off. The Pause/Resume button on the
+  // Dashboard goes through setSimulatorActive below instead, since that
+  // one *is* the user's explicit running/paused choice.
+  const startTelemetryFeed = () => {
     void (async () => {
       try {
         const token = await getTokenRef.current();
         if (token) await apiFetch("/flights/start", token, { method: "POST" });
       } catch (err) {
-        console.error("[flights] auto-start failed:", err);
+        console.error("[flights] start request failed:", err);
       }
     })();
-    // Only on first load; later changes go through setSimulatorActive.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
+  const stopTelemetryFeed = () => {
+    void (async () => {
+      try {
+        const token = await getTokenRef.current();
+        if (token) await apiFetch("/flights/end", token, { method: "POST" });
+      } catch (err) {
+        console.error("[flights] end request failed:", err);
+      }
+    })();
+  };
+
+  const setSimulatorActive = (next: boolean) => {
+    setSimulatorActiveState(next);
+    if (next) startTelemetryFeed();
+    else stopTelemetryFeed();
+  };
 
   // Home (takeoff) position of the active flight. It is stored on the
   // backend and never changes, so a page refresh just re-reads it. We poll
@@ -317,6 +324,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setScenario,
       simulatorActive,
       setSimulatorActive,
+      startTelemetryFeed,
+      stopTelemetryFeed,
       isConnected,
       alerts,
       acknowledgeAlert: (id: string) =>
