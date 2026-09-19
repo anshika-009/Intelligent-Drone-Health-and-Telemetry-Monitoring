@@ -10,7 +10,7 @@ import {
 
 import { useAuth } from "@clerk/react";
 import { initialTelemetry } from "../data/mock";
-import { telemetryService } from "../services/api";
+import { apiFetch, flightsService, telemetryService } from "../services/api";
 import type { Alert, Scenario, Telemetry } from "../types";
 
 export type Theme = "light" | "dark";
@@ -28,6 +28,7 @@ const DEFAULT_THRESHOLDS: AlertThresholds = {
 };
 
 type Store = {
+  homePosition: [number, number] | null;
   telemetry: Telemetry;
   scenario: Scenario;
   setScenario: (s: Scenario) => void;
@@ -121,7 +122,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const { getToken } = useAuth();
   const [telemetry, setTelemetry] = useState(initialTelemetry);
   const [scenario, setScenarioState] = useState<Scenario>("normal");
-  const [simulatorActive, setSimulatorActive] = useState(true);
+  const [simulatorActive, setSimulatorActiveState] = useState(true);
   const [alerts, setAlerts] = useState<Alert[]>([]);
 
   const [theme, setTheme] = useState<Theme>(() => {
@@ -189,8 +190,77 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void postScenario(next);
   };
 
-    const getTokenRef = useRef(getToken);
-  useEffect(() => { getTokenRef.current = getToken; }, [getToken]);
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
+
+  const setSimulatorActive = (next: boolean) => {
+    setSimulatorActiveState(next);
+    void (async () => {
+      try {
+        const token = await getTokenRef.current();
+        await apiFetch(next ? "/flights/start" : "/flights/end", token, {
+          method: "POST",
+        });
+      } catch (err) {
+        console.error("[flights] start/end request failed:", err);
+      }
+    })();
+  };
+
+  // Start a flight automatically when the app loads. The backend returns
+  // "already_active" if one exists, so repeating this is harmless.
+  useEffect(() => {
+    if (!simulatorActive) return;
+    void (async () => {
+      try {
+        const token = await getTokenRef.current();
+        if (token) await apiFetch("/flights/start", token, { method: "POST" });
+      } catch (err) {
+        console.error("[flights] auto-start failed:", err);
+      }
+    })();
+    // Only on first load; later changes go through setSimulatorActive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Home (takeoff) position of the active flight. It is stored on the
+  // backend and never changes, so a page refresh just re-reads it. We poll
+  // until it is recorded (it appears after the first valid GPS fix).
+  const [homePosition, setHomePosition] = useState<[number, number] | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!simulatorActive) {
+      setHomePosition(null);
+      return;
+    }
+    let cancelled = false;
+    let timer: number | undefined;
+    const load = async () => {
+      try {
+        const token = await getTokenRef.current();
+        if (!token) return;
+        const res = (await flightsService.active(token)) as {
+          home: { latitude: number; longitude: number } | null;
+        };
+        if (cancelled) return;
+        if (res.home) {
+          setHomePosition([res.home.latitude, res.home.longitude]);
+          if (timer) window.clearInterval(timer); // found, stop polling
+        }
+      } catch (err) {
+        console.error("[flights] home lookup failed:", err);
+      }
+    };
+    void load();
+    timer = window.setInterval(() => void load(), 3000);
+    return () => {
+      cancelled = true;
+      if (timer) window.clearInterval(timer);
+    };
+  }, [simulatorActive]);
 
   const [isConnected, setIsConnected] = useState(false);
   useEffect(() => {
@@ -238,9 +308,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (pollTimer) window.clearInterval(pollTimer);
     };
   }, [scenario, simulatorActive]);
-  
+
   const value = useMemo(
     () => ({
+      homePosition,
       telemetry,
       scenario,
       setScenario,
@@ -261,6 +332,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleReducedMotion,
     }),
     [
+      homePosition,
       telemetry,
       scenario,
       simulatorActive,

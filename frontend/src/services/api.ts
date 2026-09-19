@@ -18,3 +18,11 @@ export const telemetryService = {
   latest: (token: string | null) => apiFetch('/telemetry/latest', token),
   alerts: (token: string | null) => apiFetch('/alerts', token),
 };
+
+export const flightsService = {
+  active: (token: string | null) => apiFetch('/flights/active', token),
+  list: (token: string | null) => apiFetch('/flights', token),
+  get: (token: string | null, flightId: number | string) => apiFetch(`/flights/${flightId}`, token),
+  start: (token: string | null) => apiFetch('/flights/start', token, { method: 'POST' }),
+  end: (token: string | null) => apiFetch('/flights/end', token, { method: 'POST' }),
+};
