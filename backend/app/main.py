@@ -11,6 +11,7 @@ Responsibilities:
     5. Store the latest telemetry snapshot.
     6. Serve REST APIs.
     7. Stream the same snapshot through WebSocket.
+    8. Record telemetry into per-user flight sessions (Postgres).
 
 IMPORTANT:
 
@@ -27,17 +28,18 @@ IMPORTANT:
 import asyncio
 import os
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 
 from fastapi import (
+    Depends,
     FastAPI,
     HTTPException,
     WebSocket,
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-
 
 # ---------------------------------------------------------
 # Add telemetry pipeline to Python path
@@ -76,6 +78,7 @@ except ImportError:
 # Authentication
 
 from app.core.clerk_auth import (
+    get_current_user,
     get_current_user_ws,
 )
 
@@ -85,6 +88,15 @@ from app.core.clerk_auth import (
 from app.database.session import (
     initialize,
     persist_telemetry,
+    resume_or_start_flight,
+    end_flight,
+    close_open_flights,
+    record_flight_home,
+    get_flight_home,
+    get_drone_home,
+    reset_drone_home,
+    list_flights,
+    get_flight,
 )
 
 
@@ -135,14 +147,89 @@ latest_telemetry_state: dict = {}
 
 latest_health_analysis: dict = {}
 
-flights: list[dict] = []
-
 maintenance: list[dict] = []
+
+# Which flight (DB row id) is currently open for each signed-in user.
+active_flights: dict[str, int] = {}
+
+# Guards start/end so two simultaneous requests can't create two flights.
+_flight_lock = threading.Lock()
+
+# Flights whose home position has already been recorded (the DB also
+# enforces write-once, this just avoids a DB call on every message).
+homes_recorded: set[int] = set()
 
 # Connection string is stored globally so the watchdog can rebuild a
 # fresh PipelineRunner (and therefore a fresh socket) without needing
 # to re-read the environment each time.
 _connection_string: str | None = None
+
+
+# ---------------------------------------------------------
+# Flight recording settings
+# ---------------------------------------------------------
+
+# Minimum seconds between two saved snapshots of the same flight.
+PERSIST_INTERVAL = 1.0
+
+# Even if nothing changed, save at least this often so the flight
+# timeline has no long gaps.
+HEARTBEAT = 10.0
+
+# flight_id -> (monotonic time of last save, snapshot that was saved)
+last_saved: dict[int, tuple[float, dict]] = {}
+
+
+def _changed(prev: dict, cur: dict) -> bool:
+    """True if anything worth recording changed between two snapshots."""
+
+    def moved(key: str, tolerance: float) -> bool:
+        a, b = prev.get(key), cur.get(key)
+        if a is None and b is None:
+            return False
+        if a is None or b is None:
+            return True
+        return abs(a - b) > tolerance
+
+    return (
+        moved("latitude", 1e-6)        # about 0.1 m
+        or moved("longitude", 1e-6)
+        or moved("altitude", 0.2)
+        or moved("battery_percentage", 0.5)
+        or moved("signal_strength", 2)
+        or moved("health_score", 1)
+    )
+
+
+def _has_valid_position(t: dict) -> bool:
+    """A usable GPS position: real coordinates, not the (0, 0) placeholder,
+    and the GPS not explicitly reporting 'no fix'."""
+    lat, lon = t.get("latitude"), t.get("longitude")
+    if lat is None or lon is None:
+        return False
+    if lat == 0 and lon == 0:
+        return False
+    if not t.get("gps_fix", True):
+        return False
+    return True
+
+
+def _initialize_db_with_retry(attempts: int = 10, delay: float = 2.0) -> None:
+    """Postgres may still be starting when the backend boots (docker compose
+    only waits for the container to start, not for the DB to accept
+    connections), so retry a few times before giving up."""
+    for attempt in range(1, attempts + 1):
+        try:
+            initialize()
+            return
+        except Exception as error:
+            print(
+                f"[db] initialize failed (attempt {attempt}/{attempts}): {error}",
+                flush=True,
+            )
+            if attempt == attempts:
+                raise
+            time.sleep(delay)
 
 
 # Telemetry polling loop
@@ -254,11 +341,44 @@ async def telemetry_polling_loop():
 
                         latest_health_analysis = health
 
-                        # Persist one snapshot.
-                        persist_telemetry(
-                            telemetry,
-                            "live_mavlink",
-                        )
+                        # Persist snapshots into every currently-open flight
+                        # (rate-limited, and only when something changed).
+                        save_time = time.monotonic()
+                        for flight_id in list(active_flights.values()):
+                            # Record the takeoff ("home") position once per
+                            # flight, from the first valid GPS fix. This is
+                            # independent of the save rate limit below.
+                            if flight_id not in homes_recorded and _has_valid_position(telemetry):
+                                try:
+                                    record_flight_home(
+                                        flight_id,
+                                        telemetry["latitude"],
+                                        telemetry["longitude"],
+                                        telemetry.get("altitude"),
+                                    )
+                                    homes_recorded.add(flight_id)
+                                except Exception as home_error:
+                                    print(f"[flight] failed to record home for {flight_id}: {home_error}", flush=True)
+
+                            prev = last_saved.get(flight_id)
+                            if prev:
+                                saved_at, snapshot = prev
+                                if save_time - saved_at < PERSIST_INTERVAL:
+                                    continue
+                                if (
+                                    save_time - saved_at < HEARTBEAT
+                                    and not _changed(snapshot, telemetry)
+                                ):
+                                    continue
+                            try:
+                                persist_telemetry(flight_id, telemetry)
+                                last_saved[flight_id] = (save_time, dict(telemetry))
+                            except Exception as db_error:
+                                print(
+                                    f"[telemetry] failed to persist to flight "
+                                    f"{flight_id}: {db_error}",
+                                    flush=True,
+                                )
         except Exception as error:
             # Do not kill the telemetry loop if one packet
             # causes an unexpected processing error.
@@ -278,7 +398,10 @@ def startup() -> None:
     global pipeline_runner
     global _connection_string
 
-    initialize()
+    _initialize_db_with_retry()
+    # Flights left open by a previous run can't be resumed (active_flights
+    # is in memory), so close them.
+    close_open_flights()
 
     if not PIPELINE_AVAILABLE:
         print(
@@ -608,16 +731,66 @@ async def drone_location_socket(
 
         return
 
+
+# Flights
+
+@app.post('/api/flights/start')
+def flight_start(user_id: str = Depends(get_current_user)):
+    with _flight_lock:
+        if user_id in active_flights:
+            return {'flight_id': active_flights[user_id], 'status': 'already_active'}
+        flight_id, resumed = resume_or_start_flight(
+            user_id, drone_id='DRONE-01', scenario='live_mavlink'
+        )
+        active_flights[user_id] = flight_id
+        return {'flight_id': flight_id, 'status': 'resumed' if resumed else 'started'}
+
+@app.post('/api/flights/end')
+def flight_end(user_id: str = Depends(get_current_user)):
+    with _flight_lock:
+        flight_id = active_flights.pop(user_id, None)
+    if flight_id is None:
+        raise HTTPException(404, 'No active flight to end.')
+    last_saved.pop(flight_id, None)
+    homes_recorded.discard(flight_id)
+    end_flight(flight_id)
+    return {'flight_id': flight_id, 'status': 'ended'}
+
 @app.get('/api/flights')
-def list_flights():
-    return flights
+def list_flights_endpoint(user_id: str = Depends(get_current_user)):
+    return list_flights(user_id)
+
+# Drone home position (permanent, per user, shared by that user's flights)
+
+@app.get('/api/home')
+def drone_home(user_id: str = Depends(get_current_user)):
+    return {'home': get_drone_home(user_id, 'DRONE-01')}
+
+@app.post('/api/home/reset')
+def drone_home_reset(user_id: str = Depends(get_current_user)):
+    reset_drone_home(user_id, 'DRONE-01')
+    # This user's open flight will re-record its home from the next fix.
+    open_flight = active_flights.get(user_id)
+    if open_flight is not None:
+        homes_recorded.discard(open_flight)
+    return {'status': 'reset'}
+
+# NOTE: must stay ABOVE '/api/flights/{flight_id}', otherwise 'active'
+# would be parsed as a flight id.
+@app.get('/api/flights/active')
+def flight_active(user_id: str = Depends(get_current_user)):
+    flight_id = active_flights.get(user_id)
+    if flight_id is None:
+        return {'flight_id': None, 'home': None, 'started_at': None}
+    info = get_flight_home(flight_id) or {'home': None, 'started_at': None}
+    return {'flight_id': flight_id, **info}
 
 @app.get('/api/flights/{flight_id}')
-def flight(flight_id: str):
-    match = next((item for item in flights if item['id'] == flight_id), None)
+def flight(flight_id: int, user_id: str = Depends(get_current_user)):
+    match = get_flight(flight_id, user_id)
     if not match:
         raise HTTPException(404, 'Flight session not found.')
-    return {**match, 'telemetry': [], 'events': []}
+    return match
 
 @app.get('/api/maintenance')
 def list_maintenance():
