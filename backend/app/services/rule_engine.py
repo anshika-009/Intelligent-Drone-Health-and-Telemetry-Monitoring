@@ -1,11 +1,10 @@
 import joblib
 import pandas as pd
-
-# Load the ML model when the server starts
-ml_model = joblib.load('backend/ml_engine/drone_health_iforest.pkl')
 import math
 from collections import deque
 
+# Load the ML model when the server starts
+ml_model = joblib.load('backend/ml_engine/drone_health_iforest.pkl')
 
 class IDHTMRuleEngine:
     def __init__(self, telemetry_rate_hz=5):
@@ -34,7 +33,7 @@ class IDHTMRuleEngine:
         return {"status": "STABLE", "action": "Monitoring"}
 
     def evaluate_motor_health(self, ax, ay, az):
-        # Root Mean Square Acceleration Formula[cite: 1]
+        # Root Mean Square Acceleration Formula
         a_rms = math.sqrt(ax**2 + ay**2 + az**2)
 
         if a_rms > 30.0:
@@ -44,7 +43,8 @@ class IDHTMRuleEngine:
                 "risk": "Severe mechanical failure risk",
             }
         return {"vibration_alert": False, "rms_value": a_rms, "risk": "Normal"}
-    def get_ml_health_score(vibration, battery, speed):
+
+    def get_ml_health_score(self, vibration, battery, speed):
         # Data ko ML model ke format mein daalo
         data = pd.DataFrame([[vibration, battery, speed]], 
                             columns=['vibration', 'battery_voltage', 'ground_speed'])
@@ -55,3 +55,17 @@ class IDHTMRuleEngine:
         if prediction == -1:
             return 40  # ML ne fault pakda hai!
         return 95      # Sab normal hai
+
+    def get_overall_system_state(self, ax, ay, az, current_voltage, ground_speed):
+        """Ye master function hai jo backend simulator.py ab direct use karega"""
+        motor_status = self.evaluate_motor_health(ax, ay, az)
+        battery_status = self.evaluate_battery_state(current_voltage)
+        
+        # Calculate final AI Health Score using the actual vibration (rms) and battery values
+        ai_health = self.get_ml_health_score(motor_status["rms_value"], current_voltage, ground_speed)
+        
+        return {
+            "health_score": ai_health,
+            "battery": battery_status,
+            "motor": motor_status
+        }
