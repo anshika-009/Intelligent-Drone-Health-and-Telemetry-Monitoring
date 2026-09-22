@@ -1,3 +1,8 @@
+import joblib
+import pandas as pd
+
+# Load the ML model when the server starts
+ml_model = joblib.load('backend/ml_engine/drone_health_iforest.pkl')
 import math
 from collections import deque
 
@@ -39,3 +44,14 @@ class IDHTMRuleEngine:
                 "risk": "Severe mechanical failure risk",
             }
         return {"vibration_alert": False, "rms_value": a_rms, "risk": "Normal"}
+    def get_ml_health_score(vibration, battery, speed):
+        # Data ko ML model ke format mein daalo
+        data = pd.DataFrame([[vibration, battery, speed]], 
+                            columns=['vibration', 'battery_voltage', 'ground_speed'])
+        
+        # Prediction nikalo: 1 means Normal, -1 means Anomaly/Fault
+        prediction = ml_model.predict(data)[0]
+        
+        if prediction == -1:
+            return 40  # ML ne fault pakda hai!
+        return 95      # Sab normal hai
