@@ -363,7 +363,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       resetAlertThresholds,
       reducedMotion,
       toggleReducedMotion,
-   ,tasks,addTask,updateTaskStatus }),
+   tasks,addTask,updateTaskStatus }),
     [
       homePosition,
       telemetry,
