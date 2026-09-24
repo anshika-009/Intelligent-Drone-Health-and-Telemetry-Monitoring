@@ -2388,7 +2388,7 @@ input:focus-visible {
   color: #a1abb1;
 }
 .mobile-only {
-  display: none;
+  /* display: none; */
 }
 @keyframes pulse {
   0%,
@@ -2453,33 +2453,6 @@ input:focus-visible {
   .table-head,
   .table-row {
     grid-template-columns: 1.2fr 1.2fr 0.7fr 0.7fr 0.5fr 1.5fr 18px;
-  }
-  .sidebar {
-    left: -248px;
-    transition: 0.25s;
-    box-shadow: 0 0 30px rgba(0, 0, 0, 0.13);
-  }
-  .sidebar.open {
-    left: 0;
-  }
-  .app-main {
-    width: 100%;
-    margin-left: 0;
-  }
-  .topbar {
-    height: 64px;
-    padding: 0 5%;
-  }
-  .mobile-only {
-    display: grid;
-  }
-  .breadcrumb {
-    margin-right: auto;
-    margin-left: 13px;
-  }
-  .top-status,
-  .user-name {
-    display: none;
   }
 }
 @media (max-width: 760px) {
@@ -3058,7 +3031,7 @@ input:focus-visible {
   justify-self: end;
 }
 .setting-row > span:last-child {
-  padding: 7px 10px;
+  padding: 12px 14px;
   border: 1px solid #c8e2d2;
   background: #f4fbf7;
   color: #327653;
@@ -4396,40 +4369,72 @@ input:focus-visible {
   background: transparent !important;
   border: 0 !important;
 }
-.idhtm-leaflet-drone {
-  position: relative;
-  width: 32px;
-  height: 32px;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: #2364a1;
-  box-shadow:
-    0 0 0 5px rgba(35, 100, 161, 0.16),
-    0 5px 14px rgba(35, 100, 161, 0.3);
+.idhtm-leaflet-aircraft {
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
-  color: #fff;
+  filter: drop-shadow(0 2px 4px rgba(35, 100, 161, 0.45));
 }
-.idhtm-leaflet-drone:before {
-  content: "";
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-bottom: 11px solid #fff;
-  transform: translateY(-1px);
+.idhtm-leaflet-home-icon {
+  background: transparent !important;
+  border: 0 !important;
 }
-.idhtm-leaflet-drone span {
-  position: absolute;
-  inset: -10px;
-  border: 1px solid rgba(35, 100, 161, 0.28);
-  border-radius: 50%;
+.idhtm-leaflet-home {
+  filter: drop-shadow(0 3px 5px rgba(189, 81, 77, 0.5));
+}
+.idhtm-leaflet-home svg {
+  fill: #bd514d;
+  stroke: #fff;
+  stroke-width: 0.8;
+}
+.idhtm-leaflet-home-dot {
+  fill: #fff;
+}
+.idhtm-leaflet-aircraft svg {
+  fill: #2364a1;
+  stroke: #fff;
+  stroke-width: 0.6;
 }
 .idhtm-openstreet-map .live-map-readout {
   z-index: 1000;
 }
 .idhtm-openstreet-map .map-attribution {
   z-index: 1000;
+}
+.live-map-offline-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(230, 239, 237, 0.55);
+  pointer-events: none;
+}
+.live-map-offline-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(210, 223, 224, 0.92);
+  border-radius: 4px;
+  box-shadow: 0 10px 26px rgba(55, 82, 91, 0.14);
+  color: #bd514d;
+}
+.live-map-offline-badge strong {
+  display: block;
+  font: 12px "DM Mono";
+  letter-spacing: 0.04em;
+  color: #1b2530;
+}
+.live-map-offline-badge span {
+  display: block;
+  margin-top: 3px;
+  font: 10px "DM Mono";
+  letter-spacing: 0.02em;
+  color: #687680;
 }
 @media (max-width: 760px) {
   .idhtm-openstreet-map .leaflet-control-zoom {
@@ -4919,3 +4924,42 @@ html.dark .toggle-switch {
 .settings-heading-right .section-heading>div{display:flex;flex-direction:column;align-items:center}
 .settings-heading-right .eyebrow{justify-content:center}
 .settings-heading-right p{margin:12px auto 0}
+  .sidebar {
+    left: -248px;
+    transition: 0.25s;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.13);
+  }
+  .sidebar.open {
+    left: 0;
+  }
+  .app-main {
+    width: 100%;
+    margin-left: 0;
+  }
+  .topbar {
+    height: 64px;
+    padding: 0 5%;
+  }
+  .mobile-only {
+    display: grid;
+  }
+  .breadcrumb {
+    margin-right: auto;
+    margin-left: 13px;
+  }
+  .top-status,
+  .user-name {
+    display: none;
+  }
+
+/* --- Settings page: theme (light/dark) segmented control --- */
+.theme-switch{display:inline-flex;gap:4px;padding:4px;border:1px solid var(--line);border-radius:4px;background:#f4f5f5}
+.setting-row .theme-switch{grid-column:3;justify-self:end}
+.theme-switch button{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border:0;border-radius:3px;background:transparent;color:#6d7982;font-size:11px;font-weight:600;transition:.15s ease}
+.theme-switch button:hover{color:var(--ink)}
+.theme-switch button.selected{background:#fff;color:var(--blue);box-shadow:0 1px 3px rgba(29,43,56,.12)}
+html.dark .theme-switch{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14)}
+html.dark .theme-switch button{color:#9fb0b5}
+html.dark .theme-switch button.selected{background:rgba(255,255,255,.12);color:#8fd0e8}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.spin-anim { animation: spin 1s linear infinite; }

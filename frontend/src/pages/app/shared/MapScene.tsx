@@ -25,8 +25,8 @@ export function StaticMapScene({ variant = 'live', progress = 62 }: { variant?: 
   </div>;
 }
 
-export function MapScene({ variant = 'live', progress = 62, location, route }: { variant?: MapVariant; progress?: number; location?: MapLocation; route?: RoutePoint[] }) {
-  if (variant === 'live' || variant === 'replay' || variant === 'detail') return <LiveGoogleMap location={location} route={route} fallback={<StaticMapScene variant={variant} progress={progress} />} />;
+export function MapScene({ variant = 'live', progress = 62, location, route, home, offline, offlineMessage }: { variant?: MapVariant; progress?: number; location?: MapLocation; route?: RoutePoint[]; home?: RoutePoint | null; offline?: boolean; offlineMessage?: string }) {
+  if (variant === 'live' || variant === 'replay' || variant === 'detail') return <LiveGoogleMap location={location} route={route} home={home} offline={offline} offlineMessage={offlineMessage} fallback={<StaticMapScene variant={variant} progress={progress} />} />;
   return <StaticMapScene variant={variant} progress={progress} />;
 }
 

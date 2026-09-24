@@ -179,26 +179,26 @@ class TestFailurePathsAndIntegrity(unittest.TestCase):
     # 10. Adapter isolation
     def test_adapter_isolation_and_determinism(self):
         state = VehicleState(
-            timestamp=datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
-            latitude=10.0,
-            longitude=20.0,
-            battery_voltage=12.0
-        )
-        
+        timestamp=datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+        latitude=10.0,
+        longitude=20.0,
+        battery_voltage=12.0)
+
         # Convert twice
         dict1 = adapt_to_backend(state)
         dict2 = adapt_to_backend(state)
-        
+
         # Deterministic
         self.assertEqual(dict1, dict2)
-        
-        # Mutable placeholder isolation
-        dict1['motor_outputs'][0] = 999
-        self.assertNotEqual(dict1['motor_outputs'], dict2['motor_outputs'])
-        
+
+        # Motor outputs are unavailable in the current telemetry pipeline
+        self.assertIsNone(dict1['motor_outputs'])
+        self.assertIsNone(dict2['motor_outputs'])
+
         # Ensure VehicleState was not mutated
         self.assertEqual(state.latitude, 10.0)
-
+        self.assertEqual(state.longitude, 20.0)
+        self.assertEqual(state.battery_voltage, 12.0)
     # 11. Architectural isolation
     def test_architectural_isolation_no_forbidden_imports(self):
         import sys
