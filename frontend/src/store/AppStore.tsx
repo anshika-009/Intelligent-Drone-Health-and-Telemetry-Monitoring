@@ -29,17 +29,21 @@ const DEFAULT_THRESHOLDS: AlertThresholds = {
 
 type Store = {
   homePosition: [number, number] | null;
- tasks: MaintenanceTask[];addTask: (task: Omit<MaintenanceTask, 'id' | 'created' | 'status'>) => void;updateTaskStatus: (id: string, status: MaintenanceTask['status']) => void; telemetry: Telemetry;
+  tasks: MaintenanceTask[];
+  addTask: (task: Omit<MaintenanceTask, "id" | "created" | "status">) => void;
+  updateTaskStatus: (id: string, status: MaintenanceTask["status"]) => void;
+  telemetry: Telemetry;
   scenario: Scenario;
   setScenario: (s: Scenario) => void;
   simulatorActive: boolean;
-  setSimulatorActive: (v: boolean) => void;
-  startTelemetryFeed: () => void;
+  setSimulatorActive: (v: boolean, opts?: { forceNew?: boolean }) => void;
+  startTelemetryFeed: (forceNew?: boolean) => void;
   stopTelemetryFeed: () => void;
   isConnected: boolean;
   alerts: Alert[];
   acknowledgeAlert: (id: string) => void;
-  theme: Theme;toggleTheme: () => void;
+  theme: Theme;
+  toggleTheme: () => void;
   alertThresholds: AlertThresholds;
   setAlertThresholds: (t: AlertThresholds) => void;
   resetAlertThresholds: () => void;
@@ -123,7 +127,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const { getToken } = useAuth();
   const [telemetry, setTelemetry] = useState(initialTelemetry);
   const [scenario, setScenarioState] = useState<Scenario>("normal");
-  const [simulatorActive, setSimulatorActiveState] = useState(true);
+  // Off until the user presses "Start flight" on the Dashboard - no
+  // connection is opened just because the app loaded.
+  const [simulatorActive, setSimulatorActiveState] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
 
   const [theme, setTheme] = useState<Theme>(() => {
@@ -148,28 +154,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // 2. DECLARE MAINTENANCE STATE AND FUNCTIONS FIRST
   const [tasks, setTasks] = useState<MaintenanceTask[]>([
     {
-      id: 'TASK-001',
-      component: 'Motor 2',
-      issue: 'Potential bearing wear',
-      recommendation: 'Inspect motor bearing before next extended flight.',
-      severity: 'Medium',
-      status: 'Pending',
-      created: '21 Aug 2026'
-    }
+      id: "TASK-001",
+      component: "Motor 2",
+      issue: "Potential bearing wear",
+      recommendation: "Inspect motor bearing before next extended flight.",
+      severity: "Medium",
+      status: "Pending",
+      created: "21 Aug 2026",
+    },
   ]);
-  const addTask = (newTask: Omit<MaintenanceTask, 'id' | 'created' | 'status'>) => {
-    setTasks(prev => [
+  const addTask = (
+    newTask: Omit<MaintenanceTask, "id" | "created" | "status">,
+  ) => {
+    setTasks((prev) => [
       {
         ...newTask,
         id: `TASK-${Date.now()}`,
-        status: 'Pending',
-        created: 'Today'
+        status: "Pending",
+        created: "Today",
       },
-      ...prev
+      ...prev,
     ]);
   };
-  const updateTaskStatus = (id: string, status: MaintenanceTask['status']) => {
-    setTasks(prev => prev.map(t => (t.id === id ? { ...t, status } : t)));
+  const updateTaskStatus = (id: string, status: MaintenanceTask["status"]) => {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
   };
   const [alertThresholds, setAlertThresholds] = useState<AlertThresholds>(
     () => {
@@ -229,11 +237,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // resumes exactly where they left off. The Pause/Resume button on the
   // Dashboard goes through setSimulatorActive below instead, since that
   // one *is* the user's explicit running/paused choice.
-  const startTelemetryFeed = () => {
+  const startTelemetryFeed = (forceNew?: boolean) => {
     void (async () => {
       try {
         const token = await getTokenRef.current();
-        if (token) await apiFetch("/flights/start", token, { method: "POST" });
+        if (token) await flightsService.start(token, forceNew);
       } catch (err) {
         console.error("[flights] start request failed:", err);
       }
@@ -250,9 +258,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })();
   };
 
-  const setSimulatorActive = (next: boolean) => {
+  // `forceNew` skips the backend's resume-window check so a genuinely
+  // new flight (new home, taken from wherever the aircraft currently
+  // is) starts instead of continuing the one that was paused. Used by
+  // the Dashboard's "Start new flight" button.
+  const setSimulatorActive = (next: boolean, opts?: { forceNew?: boolean }) => {
     setSimulatorActiveState(next);
-    if (next) startTelemetryFeed();
+    if (next) startTelemetryFeed(opts?.forceNew);
     else stopTelemetryFeed();
   };
 
@@ -363,7 +375,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       resetAlertThresholds,
       reducedMotion,
       toggleReducedMotion,
-   tasks,addTask,updateTaskStatus }),
+      tasks,
+      addTask,
+      updateTaskStatus,
+    }),
     [
       homePosition,
       telemetry,
@@ -373,13 +388,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       alerts,
       theme,
       alertThresholds,
-      reducedMotion,tasks,addTask,updateTaskStatus,
+      reducedMotion,
+      tasks,
+      addTask,
+      updateTaskStatus,
     ],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 
-
-// Include tasks, addTask, and updateTaskStatus in useMemo value.
+  // Include tasks, addTask, and updateTaskStatus in useMemo value.
 }
 export function useApp() {
   const ctx = useContext(Context);
@@ -393,7 +410,7 @@ export type MaintenanceTask = {
   component: string;
   issue: string;
   recommendation: string;
-  severity: 'Low' | 'Medium' | 'High' | 'Critical';
-  status: 'Pending' | 'In Progress' | 'Completed';
+  severity: "Low" | "Medium" | "High" | "Critical";
+  status: "Pending" | "In Progress" | "Completed";
   created: string;
 };
