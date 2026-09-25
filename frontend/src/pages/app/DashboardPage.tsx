@@ -34,16 +34,18 @@ export function DashboardPage() {
     setSimulatorActive,
     acknowledgeAlert,
     isConnected,
-    startTelemetryFeed,
     stopTelemetryFeed,
     homePosition,
   } = useApp();
   const [showScenario, setShowScenario] = useState(false);
 
-  // The backend only connects to the drone while a flight is open, so
-  // opening the dashboard (with the feed running) must start one, and
-  // leaving it must end it. Without this the backend stays idle and
-  // /api/telemetry/latest returns 503.
+  // Dashboard-level flight phase, independent of `simulatorActive` (which
+  // is just "is the feed on right now"). This is what decides which
+  // button(s) are shown: a first-time "Start flight", a "Pause flight"
+  // once running, or the "Resume flight" / "Start new flight" pair once
+  // paused.
+  const [phase, setPhase] = useState<"idle" | "running" | "paused">("idle");
+
   // Keep the map on the last REAL position while the feed is paused (or
   // the link drops). Passing `undefined` there makes the map fall back to
   // its default centre (San Francisco) and pan away from the flight.
@@ -51,16 +53,37 @@ export function DashboardPage() {
   if (isConnected) lastLiveTelemetry.current = telemetry;
   const mapLocation = isConnected ? telemetry : lastLiveTelemetry.current;
 
+  // The backend only connects to the drone while a flight is open. If the
+  // user navigates away mid-flight, still tell the backend to close it so
+  // it doesn't stay open forever - but don't touch `phase`/`simulatorActive`
+  // themselves, so coming back to the dashboard resumes exactly where they
+  // left off.
   const feedRunning = useRef(simulatorActive);
   feedRunning.current = simulatorActive;
   useEffect(() => {
-    if (feedRunning.current) startTelemetryFeed();
     return () => {
       if (feedRunning.current) stopTelemetryFeed();
     };
     // Mount/unmount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleStartFlight = () => {
+    setPhase("running");
+    setSimulatorActive(true);
+  };
+  const handlePauseFlight = () => {
+    setPhase("paused");
+    setSimulatorActive(false);
+  };
+  const handleResumeFlight = () => {
+    setPhase("running");
+    setSimulatorActive(true);
+  };
+  const handleNewFlight = () => {
+    setPhase("running");
+    setSimulatorActive(true, { forceNew: true });
+  };
   const points = chartSeries.map(
     (_, i) => telemetry.altitude + Math.sin(i) * 8,
   );
@@ -82,13 +105,26 @@ export function DashboardPage() {
           >
             <SlidersHorizontal size={15} /> {scenarioLabels[scenario]}
           </button>
-          <button
-            className={`button ${simulatorActive ? "secondary" : ""}`}
-            onClick={() => setSimulatorActive(!simulatorActive)}
-          >
-            {simulatorActive ? <Pause size={15} /> : <Play size={15} />}{" "}
-            {simulatorActive ? "Pause feed" : "Start feed"}
-          </button>
+          {phase === "idle" && (
+            <button className="button" onClick={handleStartFlight}>
+              <Play size={15} /> Start flight
+            </button>
+          )}
+          {phase === "running" && (
+            <button className="button secondary" onClick={handlePauseFlight}>
+              <Pause size={15} /> Pause flight
+            </button>
+          )}
+          {phase === "paused" && (
+            <>
+              <button className="button" onClick={handleResumeFlight}>
+                <Play size={15} /> Resume flight
+              </button>
+              <button className="button ghost" onClick={handleNewFlight}>
+                <Play size={15} /> Start new flight
+              </button>
+            </>
+          )}
         </div>
       </div>
       {showScenario && (
@@ -97,7 +133,11 @@ export function DashboardPage() {
       <div className="status-strip">
         <span>
           <span className="live-dot" />{" "}
-          {simulatorActive ? "SIMULATOR ACTIVE" : "TELEMETRY PAUSED"}
+          {phase === "idle"
+            ? "FLIGHT NOT STARTED"
+            : simulatorActive
+              ? "SIMULATOR ACTIVE"
+              : "TELEMETRY PAUSED"}
         </span>
         <span>Source: telemetry + live location stream</span>
         <span>
@@ -168,7 +208,9 @@ export function DashboardPage() {
                 Rule engine is watching{" "}
                 {alerts.filter((a) => !a.acknowledged).length || 1} active
                 signal
-                {alerts.filter((a) => !a.acknowledged).length === 1 ? "" : "s"}{" "}
+                {alerts.filter((a) => !a.acknowledged).length === 1
+                  ? ""
+                  : "s"}{" "}
                 across 5 systems.
               </p>
               <Link to="/app/health" className="inline-link">
@@ -234,11 +276,17 @@ export function DashboardPage() {
               {Math.abs(telemetry.longitude).toFixed(4)}° W
             </span>
           </div>
-                    <MapScene
+          <MapScene
             location={mapLocation}
             home={homePosition}
             offline={!isConnected}
-            offlineMessage={simulatorActive ? 'Simulator offline' : 'Telemetry paused'}
+            offlineMessage={
+              phase === "idle"
+                ? "Flight not started"
+                : simulatorActive
+                  ? "Simulator offline"
+                  : "Telemetry paused"
+            }
           />
         </section>
         <section className="flight-status panel">

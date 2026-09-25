@@ -89,6 +89,7 @@ from app.database.session import (
     initialize,
     persist_telemetry,
     resume_or_start_flight,
+    start_flight,
     end_flight,
     close_open_flights,
     record_flight_home,
@@ -835,17 +836,27 @@ async def drone_location_socket(
 # Flights
 
 @app.post('/api/flights/start')
-def flight_start(user_id: str = Depends(get_current_user)):
+def flight_start(force_new: bool = False, user_id: str = Depends(get_current_user)):
     with _flight_lock:
-        if user_id in active_flights:
+        if user_id in active_flights and not force_new:
             return {'flight_id': active_flights[user_id], 'status': 'already_active'}
         # If nobody else currently has a flight open, this call is the
         # one that's actually turning the pipeline on (dashboard opened
         # / resumed from paused).
         was_idle = len(active_flights) == 0
-        flight_id, resumed = resume_or_start_flight(
-            user_id, drone_id='DRONE-01', scenario='live_mavlink'
-        )
+        if force_new:
+            # User explicitly asked for a brand new flight (not a resume
+            # of whatever was paused) - e.g. "Start new flight" after a
+            # pause. Skip the resume-window check entirely so a fresh
+            # flight row (with no home yet) is always created; its home
+            # will be recorded fresh from the next real GPS fix, i.e.
+            # wherever the aircraft currently is.
+            flight_id = start_flight(user_id, drone_id='DRONE-01', scenario='live_mavlink')
+            resumed = False
+        else:
+            flight_id, resumed = resume_or_start_flight(
+                user_id, drone_id='DRONE-01', scenario='live_mavlink'
+            )
         active_flights[user_id] = flight_id
         if was_idle:
             _activate_pipeline()
